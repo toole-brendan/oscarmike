@@ -8,7 +8,7 @@ const connectionOptions = {
   idle_timeout: 30, // Max seconds a connection can be idle before being removed
   connect_timeout: 15, // Max seconds to wait for a connection
   prepare: false, // For better performance with Neon serverless
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
+  ssl: { rejectUnauthorized: false }, // Required for Neon serverless
   onnotice: () => {}, // Silence notices for cleaner logs
 };
 

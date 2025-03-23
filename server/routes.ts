@@ -1,7 +1,7 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { insertExerciseSchema, insertFormIssueSchema, insertKeyPointsSchema, insertUserSchema } from "@shared/schema";
+import { storage, type PaginationParams } from "./storage";
+import { ExerciseType, insertExerciseSchema, insertFormIssueSchema, insertKeyPointsSchema, insertUserSchema } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 
@@ -10,6 +10,23 @@ const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
 });
+
+// Helper to extract pagination parameters from request
+const getPaginationParams = (req: Request): PaginationParams => {
+  const page = req.query.page ? parseInt(req.query.page as string) : undefined;
+  const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string) : undefined;
+  const sortBy = req.query.sortBy as string | undefined;
+  const sortDirection = (req.query.sortDirection as 'asc' | 'desc' | undefined);
+  
+  return {
+    page: !isNaN(page as number) ? page : undefined,
+    pageSize: !isNaN(pageSize as number) ? pageSize : undefined,
+    sortBy,
+    sortDirection: (sortDirection === 'asc' || sortDirection === 'desc') 
+      ? sortDirection 
+      : undefined
+  };
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // prefix all routes with /api
@@ -60,6 +77,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get(`${api}/users`, async (req: Request, res: Response) => {
+    try {
+      const paginationParams = getPaginationParams(req);
+      const users = await storage.getUsers(paginationParams);
+      return res.json(users);
+    } catch (error) {
+      console.error('Error getting users:', error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get(`${api}/users/:id`, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
@@ -89,9 +117,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid user ID" });
       }
       
-      const exercises = await storage.getExercises(userId);
+      const paginationParams = getPaginationParams(req);
+      const exercises = await storage.getExercises(userId, paginationParams);
       return res.json(exercises);
     } catch (error) {
+      console.error('Error getting exercises:', error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get(`${api}/users/:userId/exercises/:type`, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const type = req.params.type as ExerciseType;
+      
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: "Invalid user ID" });
+      }
+      
+      if (!['pushups', 'pullups', 'situps', 'run'].includes(type)) {
+        return res.status(400).json({ message: "Invalid exercise type" });
+      }
+      
+      const paginationParams = getPaginationParams(req);
+      const exercises = await storage.getExercisesByType(userId, type, paginationParams);
+      return res.json(exercises);
+    } catch (error) {
+      console.error('Error getting exercises by type:', error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -162,9 +214,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid exercise ID" });
       }
       
-      const formIssues = await storage.getFormIssues(exerciseId);
+      const paginationParams = getPaginationParams(req);
+      const formIssues = await storage.getFormIssues(exerciseId, paginationParams);
       return res.json(formIssues);
     } catch (error) {
+      console.error('Error getting form issues:', error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -191,9 +245,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid exercise ID" });
       }
       
-      const keyPoints = await storage.getKeyPoints(exerciseId);
+      const paginationParams = getPaginationParams(req);
+      const keyPoints = await storage.getKeyPoints(exerciseId, paginationParams);
       return res.json(keyPoints);
     } catch (error) {
+      console.error('Error getting key points:', error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -207,6 +263,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: fromZodError(error).message });
       }
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Leaderboard routes
+  app.get(`${api}/leaderboard/:type`, async (req: Request, res: Response) => {
+    try {
+      const type = req.params.type as ExerciseType;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+      
+      if (!['pushups', 'pullups', 'situps', 'run'].includes(type)) {
+        return res.status(400).json({ message: "Invalid exercise type" });
+      }
+      
+      if (isNaN(limit) || limit < 1 || limit > 100) {
+        return res.status(400).json({ message: "Invalid limit parameter" });
+      }
+      
+      const leaderboard = await storage.getLeaderboardByExerciseType(type, limit);
+      return res.json(leaderboard);
+    } catch (error) {
+      console.error('Error getting leaderboard:', error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get(`${api}/leaderboard`, async (req: Request, res: Response) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+      
+      if (isNaN(limit) || limit < 1 || limit > 100) {
+        return res.status(400).json({ message: "Invalid limit parameter" });
+      }
+      
+      const overallLeaderboard = await storage.getOverallLeaderboard(limit);
+      return res.json(overallLeaderboard);
+    } catch (error) {
+      console.error('Error getting overall leaderboard:', error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get(`${api}/users/:userId/history/:type`, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const type = req.params.type as ExerciseType;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+      
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: "Invalid user ID" });
+      }
+      
+      if (!['pushups', 'pullups', 'situps', 'run'].includes(type)) {
+        return res.status(400).json({ message: "Invalid exercise type" });
+      }
+      
+      if (isNaN(limit) || limit < 1 || limit > 100) {
+        return res.status(400).json({ message: "Invalid limit parameter" });
+      }
+      
+      const history = await storage.getUserHistory(userId, type, limit);
+      return res.json(history);
+    } catch (error) {
+      console.error('Error getting user history:', error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });
