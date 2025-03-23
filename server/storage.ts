@@ -294,7 +294,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   // Leaderboard methods
-  async getLeaderboardByExerciseType(type: ExerciseType, limit: number = 10): Promise<Exercise[]> {
+  async getLeaderboardByExerciseType(type: ExerciseType, limit: number = 10): Promise<(Exercise & { username: string })[]> {
     try {
       // First check if there are any completed exercises of this type
       const exerciseCount = await db.select({ count: count() })
@@ -311,8 +311,14 @@ export class DatabaseStorage implements IStorage {
         return [];
       }
       
-      return await db.select()
+      // Get exercises with user information
+      const result = await db
+        .select({
+          ...exercises,
+          username: users.username
+        })
         .from(exercises)
+        .leftJoin(users, eq(exercises.userId, users.id))
         .where(
           and(
             eq(exercises.type, type),
@@ -323,6 +329,8 @@ export class DatabaseStorage implements IStorage {
         )
         .orderBy(desc(exercises.points))
         .limit(limit);
+      
+      return result;
     } catch (error) {
       console.error('Error in getLeaderboardByExerciseType:', error);
       // Return empty array on error
@@ -478,7 +486,7 @@ export class DatabaseStorage implements IStorage {
     type: ExerciseType, 
     radiusMiles: number = 5, 
     limit: number = 10
-  ): Promise<Exercise[]> {
+  ): Promise<(Exercise & { username: string })[]> {
     try {
       // Get current user's location
       const currentUser = await this.getUser(userId);
@@ -489,8 +497,10 @@ export class DatabaseStorage implements IStorage {
       
       // Get all completed exercises of this type with valid points
       const allExercises = await db.select({
-        exercise: exercises,
-        user: users
+        ...exercises,
+        username: users.username,
+        userLatitude: users.latitude,
+        userLongitude: users.longitude
       })
       .from(exercises)
       .innerJoin(users, eq(exercises.userId, users.id))
@@ -505,21 +515,20 @@ export class DatabaseStorage implements IStorage {
         )
       );
       
-      // Filter by distance and map to return only the exercise object
+      // Filter by distance
       const localExercises = allExercises
         .filter(row => {
-          if (!row.user.latitude || !row.user.longitude) return false;
+          if (!row.userLatitude || !row.userLongitude) return false;
           
           const distance = this.calculateDistance(
             currentUser.latitude,
             currentUser.longitude,
-            row.user.latitude,
-            row.user.longitude
+            row.userLatitude,
+            row.userLongitude
           );
           
           return distance <= radiusMiles;
-        })
-        .map(row => row.exercise);
+        });
       
       // Sort by points and limit results
       return localExercises

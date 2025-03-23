@@ -27,6 +27,7 @@ type LeaderboardExercise = {
   runTime: number | null;
   completedAt: string;
   points: number | null;
+  username?: string; // Added to support the username from the joined query
 };
 
 const Leaderboard: React.FC = () => {
@@ -356,7 +357,7 @@ const Leaderboard: React.FC = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-16">Rank</TableHead>
-                      <TableHead>User ID</TableHead>
+                      <TableHead>User</TableHead>
                       {type === 'run' ? (
                         <TableHead className="text-right">Time</TableHead>
                       ) : (
@@ -371,7 +372,7 @@ const Leaderboard: React.FC = () => {
                       exerciseLeaderboard.map((entry, index) => (
                         <TableRow key={entry.id}>
                           <TableCell className="font-medium">{getRankBadge(index)}</TableCell>
-                          <TableCell>User #{entry.userId}</TableCell>
+                          <TableCell>{entry.username || `User #${entry.userId}`}</TableCell>
                           {type === 'run' ? (
                             <TableCell className="text-right">{formatRunTime(entry.runTime)}</TableCell>
                           ) : (
