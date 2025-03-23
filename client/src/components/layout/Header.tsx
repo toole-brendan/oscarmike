@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { BarChart3, LogOut } from 'lucide-react';
+import { BarChart3, LogOut, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
@@ -52,6 +52,15 @@ const Header: React.FC = () => {
         <nav className="flex items-center space-x-4">
           {isLoggedIn ? (
             <div className="flex items-center space-x-4">
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => navigate('/leaderboard')}
+                className="text-gray-700 hover:text-primary"
+              >
+                <Trophy className="h-4 w-4 mr-2" />
+                Leaderboard
+              </Button>
               <button 
                 className="flex items-center text-sm font-medium text-gray-700 hover:text-primary focus:outline-none"
                 onClick={() => navigate('/')}

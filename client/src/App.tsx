@@ -9,6 +9,7 @@ import Results from "@/pages/results";
 import Run from "@/pages/run";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import Leaderboard from "@/pages/leaderboard";
 import Header from "@/components/layout/Header";
 import MobileNav from "@/components/layout/MobileNav";
 
@@ -31,6 +32,7 @@ function Router() {
                 <Route path="/exercise/:type" component={Exercise} />
                 <Route path="/results/:id" component={Results} />
                 <Route path="/run" component={Run} />
+                <Route path="/leaderboard" component={Leaderboard} />
                 <Route component={NotFound} />
               </Switch>
             </main>
