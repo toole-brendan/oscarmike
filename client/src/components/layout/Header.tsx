@@ -1,15 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { BarChart3, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 const Header: React.FC = () => {
   const [_, navigate] = useLocation();
-  // We'll simulate a logged-in state for now
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const { toast } = useToast();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userData, setUserData] = useState<{id: number, username: string} | null>(null);
+  
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUserData(parsedUser);
+        setIsLoggedIn(true);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        localStorage.removeItem('user');
+      }
+    }
+  }, []);
   
   const handleLogout = () => {
+    localStorage.removeItem('user');
     setIsLoggedIn(false);
+    setUserData(null);
+    
+    toast({
+      title: 'Logged out successfully',
+      description: 'You have been logged out of your account',
+      variant: 'default',
+    });
+    
     navigate('/login');
   };
   
@@ -31,9 +56,9 @@ const Header: React.FC = () => {
                 className="flex items-center text-sm font-medium text-gray-700 hover:text-primary focus:outline-none"
                 onClick={() => navigate('/')}
               >
-                <span>John D.</span>
+                <span>{userData?.username || 'User'}</span>
                 <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center ml-2">
-                  <span className="text-xs font-medium">JD</span>
+                  <span className="text-xs font-medium">{userData?.username ? userData.username.substring(0, 2).toUpperCase() : 'U'}</span>
                 </div>
               </button>
               <Button 

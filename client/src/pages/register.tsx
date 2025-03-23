@@ -5,7 +5,7 @@ import { useLocation } from 'wouter';
 import { useMutation } from '@tanstack/react-query';
 import { insertUserSchema } from '@shared/schema';
 import { z } from 'zod';
-import { apiRequest } from '@/lib/queryClient';
+import { apiRequestObject } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 
 import { Button } from '@/components/ui/button';
@@ -47,15 +47,20 @@ const Register: React.FC = () => {
     mutationFn: async (values: RegisterFormValues) => {
       // Remove confirmPassword as it's not part of the API schema
       const { confirmPassword, ...userData } = values;
-      return apiRequest('POST', '/api/users', userData);
+      return apiRequestObject({
+        url: '/api/users',
+        method: 'POST',
+        body: userData,
+        on401: 'throw'
+      });
     },
     onSuccess: async () => {
       toast({
         title: 'Registration successful',
-        description: 'Your account has been created',
+        description: 'Your account has been created. Please log in.',
         variant: 'default',
       });
-      navigate('/');
+      navigate('/login');
     },
     onError: (error) => {
       toast({
