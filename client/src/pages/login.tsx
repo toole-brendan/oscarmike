@@ -5,7 +5,7 @@ import { useLocation } from 'wouter';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
+import { apiRequestObject } from '@/lib/queryClient';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -41,10 +41,11 @@ const Login: React.FC = () => {
   
   const loginMutation = useMutation({
     mutationFn: async (values: LoginFormValues) => {
-      return apiRequest({
-        url: `/api/login`,
+      return apiRequestObject({
+        url: '/api/login',
         method: 'POST',
         body: values,
+        on401: 'throw'
       });
     },
     onSuccess: (data) => {

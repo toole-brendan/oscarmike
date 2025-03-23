@@ -4,9 +4,39 @@ import { Exercise, ExerciseType, ExerciseStatus, exerciseTypes } from '@shared/s
 import { Card, CardContent } from '@/components/ui/card';
 import CircularProgress from '@/components/ui/circular-progress';
 import ExerciseCard from '@/components/ui/exercise-card';
+import { useLocation } from 'wouter';
+import { useToast } from '@/hooks/use-toast';
 
 const Dashboard: React.FC = () => {
-  const userId = 1; // Hardcoded for demo purposes
+  const [_, navigate] = useLocation();
+  const { toast } = useToast();
+  
+  // Get authenticated user data from localStorage
+  const [userData, setUserData] = useState<{id: number, username: string} | null>(null);
+  
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUserData(parsedUser);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        localStorage.removeItem('user');
+        navigate('/login');
+      }
+    } else {
+      // Redirect to login if no user data is found
+      navigate('/login');
+    }
+  }, [navigate]);
+  
+  // If user data is not loaded yet or if user is not authenticated, show loading or redirect
+  if (!userData) {
+    return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
+  }
+  
+  const userId = userData.id;
   
   // Fetch user exercises
   const { data: exercises, isLoading } = useQuery({
@@ -23,7 +53,6 @@ const Dashboard: React.FC = () => {
       
       // If no exercises exist, create default ones
       if (data.length === 0) {
-        // This would be better handled server-side, but for the demo we'll do it here
         const defaultExercises: Partial<Exercise>[] = [];
         
         for (const type of exerciseTypes) {

@@ -23,6 +23,32 @@ export async function apiRequest(
   return res;
 }
 
+// New version of apiRequest that matches the pattern used in the app
+export interface ApiRequestOptions {
+  url: string;
+  method: string;
+  body?: unknown;
+  on401?: UnauthorizedBehavior;
+}
+
+export async function apiRequestObject(options: ApiRequestOptions): Promise<any> {
+  const { url, method, body, on401 = "throw" } = options;
+  
+  const res = await fetch(url, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: "include",
+  });
+
+  if (on401 === "returnNull" && res.status === 401) {
+    return null;
+  }
+
+  await throwIfResNotOk(res);
+  return res.json();
+}
+
 type UnauthorizedBehavior = "returnNull" | "throw";
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
