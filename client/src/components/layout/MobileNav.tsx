@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation } from 'wouter';
-import { Home, BookOpen, BarChart2, Settings } from 'lucide-react';
+import { Home, BookOpen, Trophy, Settings } from 'lucide-react';
 
 const MobileNav: React.FC = () => {
   const [location, navigate] = useLocation();
@@ -26,10 +26,13 @@ const MobileNav: React.FC = () => {
         </button>
         
         <button 
-          className="flex flex-col items-center justify-center py-3 text-gray-500"
+          className={`flex flex-col items-center justify-center py-3 ${
+            location === '/leaderboard' ? 'text-primary' : 'text-gray-500'
+          }`}
+          onClick={() => navigate('/leaderboard')}
         >
-          <BarChart2 className="h-6 w-6" />
-          <span className="text-xs mt-1">Stats</span>
+          <Trophy className="h-6 w-6" />
+          <span className="text-xs mt-1">Leaderboard</span>
         </button>
         
         <button 
