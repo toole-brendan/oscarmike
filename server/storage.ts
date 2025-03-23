@@ -14,6 +14,8 @@ import {
   ExerciseType,
   ExerciseStatus
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -37,117 +39,76 @@ export interface IStorage {
   createKeyPoints(keyPoints: InsertKeyPoints): Promise<KeyPoints>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private exercises: Map<number, Exercise>;
-  private formIssues: Map<number, FormIssue>;
-  private keyPoints: Map<number, KeyPoints>;
-  
-  private userIdCounter: number;
-  private exerciseIdCounter: number;
-  private formIssueIdCounter: number;
-  private keyPointsIdCounter: number;
-
-  constructor() {
-    this.users = new Map();
-    this.exercises = new Map();
-    this.formIssues = new Map();
-    this.keyPoints = new Map();
-    
-    this.userIdCounter = 1;
-    this.exerciseIdCounter = 1;
-    this.formIssueIdCounter = 1;
-    this.keyPointsIdCounter = 1;
-    
-    // Add test user
-    this.createUser({
-      username: "test",
-      password: "password"
-    });
-  }
-
+export class DatabaseStorage implements IStorage {
   // User methods
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const results = await db.select().from(users).where(eq(users.id, id));
+    return results[0];
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const results = await db.select().from(users).where(eq(users.username, username));
+    return results[0];
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userIdCounter++;
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+    const results = await db.insert(users).values(insertUser).returning();
+    return results[0];
   }
 
   // Exercise methods
   async getExercises(userId: number): Promise<Exercise[]> {
-    return Array.from(this.exercises.values()).filter(
-      (exercise) => exercise.userId === userId
-    );
+    return await db.select().from(exercises).where(eq(exercises.userId, userId));
   }
 
   async getExercise(id: number): Promise<Exercise | undefined> {
-    return this.exercises.get(id);
+    const results = await db.select().from(exercises).where(eq(exercises.id, id));
+    return results[0];
   }
 
   async getExercisesByType(userId: number, type: ExerciseType): Promise<Exercise[]> {
-    return Array.from(this.exercises.values()).filter(
-      (exercise) => exercise.userId === userId && exercise.type === type
+    return await db.select().from(exercises).where(
+      and(
+        eq(exercises.userId, userId),
+        eq(exercises.type, type)
+      )
     );
   }
 
   async createExercise(insertExercise: InsertExercise): Promise<Exercise> {
-    const id = this.exerciseIdCounter++;
-    const exercise: Exercise = { ...insertExercise, id };
-    this.exercises.set(id, exercise);
-    return exercise;
+    const results = await db.insert(exercises).values(insertExercise).returning();
+    return results[0];
   }
 
   async updateExercise(id: number, exercise: Partial<InsertExercise>): Promise<Exercise | undefined> {
-    const existingExercise = this.exercises.get(id);
+    const results = await db.update(exercises)
+      .set(exercise)
+      .where(eq(exercises.id, id))
+      .returning();
     
-    if (!existingExercise) {
-      return undefined;
-    }
-    
-    const updatedExercise: Exercise = { ...existingExercise, ...exercise };
-    this.exercises.set(id, updatedExercise);
-    
-    return updatedExercise;
+    return results[0];
   }
 
   // Form issues methods
   async getFormIssues(exerciseId: number): Promise<FormIssue[]> {
-    return Array.from(this.formIssues.values()).filter(
-      (issue) => issue.exerciseId === exerciseId
-    );
+    return await db.select().from(formIssues).where(eq(formIssues.exerciseId, exerciseId));
   }
 
   async createFormIssue(insertFormIssue: InsertFormIssue): Promise<FormIssue> {
-    const id = this.formIssueIdCounter++;
-    const formIssue: FormIssue = { ...insertFormIssue, id };
-    this.formIssues.set(id, formIssue);
-    return formIssue;
+    const results = await db.insert(formIssues).values(insertFormIssue).returning();
+    return results[0];
   }
 
   // Key points methods
   async getKeyPoints(exerciseId: number): Promise<KeyPoints[]> {
-    return Array.from(this.keyPoints.values()).filter(
-      (keyPoint) => keyPoint.exerciseId === exerciseId
-    );
+    return await db.select().from(keyPoints).where(eq(keyPoints.exerciseId, exerciseId));
   }
 
   async createKeyPoints(insertKeyPoints: InsertKeyPoints): Promise<KeyPoints> {
-    const id = this.keyPointsIdCounter++;
-    const keyPoints: KeyPoints = { ...insertKeyPoints, id };
-    this.keyPoints.set(id, keyPoints);
-    return keyPoints;
+    const results = await db.insert(keyPoints).values(insertKeyPoints).returning();
+    return results[0];
   }
 }
 
-export const storage = new MemStorage();
+// Switch from memory storage to database storage
+export const storage = new DatabaseStorage();
