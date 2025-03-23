@@ -6,11 +6,15 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  latitude: true,
+  longitude: true,
 });
 
 export const exerciseTypes = ['pushups', 'pullups', 'situps', 'run'] as const;

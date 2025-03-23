@@ -42,6 +42,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUsers(params?: PaginationParams): Promise<PaginatedResult<User>>;
+  updateUserLocation(userId: number, latitude: number, longitude: number): Promise<User | undefined>;
   
   // Exercise methods
   getExercises(userId: number, params?: PaginationParams): Promise<PaginatedResult<Exercise>>;
@@ -62,6 +63,10 @@ export interface IStorage {
   getLeaderboardByExerciseType(type: ExerciseType, limit?: number): Promise<Exercise[]>;
   getOverallLeaderboard(limit?: number): Promise<{ userId: number, username: string, totalPoints: number }[]>;
   getUserHistory(userId: number, type: ExerciseType, limit?: number): Promise<Exercise[]>;
+  
+  // Local Leaderboard methods
+  getLocalLeaderboardByExerciseType(userId: number, type: ExerciseType, radiusMiles?: number, limit?: number): Promise<Exercise[]>;
+  getLocalOverallLeaderboard(userId: number, radiusMiles?: number, limit?: number): Promise<{ userId: number, username: string, totalPoints: number, distance: number }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -416,6 +421,193 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Error in getUserHistory:', error);
       // Return empty array on error
+      return [];
+    }
+  }
+
+  // Update user location
+  async updateUserLocation(userId: number, latitude: number, longitude: number): Promise<User | undefined> {
+    try {
+      const results = await db.update(users)
+        .set({ latitude, longitude })
+        .where(eq(users.id, userId))
+        .returning();
+      
+      return results[0];
+    } catch (error) {
+      console.error('Error in updateUserLocation:', error);
+      return undefined;
+    }
+  }
+
+  // Calculate distance between two points using Haversine formula
+  private calculateDistance(lat1: number | null, lon1: number | null, lat2: number | null, lon2: number | null): number {
+    // Check for null values
+    if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) {
+      return Number.MAX_VALUE; // Return a very large number if any coordinate is null
+    }
+    
+    // Radius of the Earth in miles
+    const earthRadiusMiles = 3958.8;
+    
+    // Convert latitude and longitude from degrees to radians
+    const latRad1 = lat1 * (Math.PI / 180);
+    const lonRad1 = lon1 * (Math.PI / 180);
+    const latRad2 = lat2 * (Math.PI / 180);
+    const lonRad2 = lon2 * (Math.PI / 180);
+    
+    // Difference in coordinates
+    const dLat = latRad2 - latRad1;
+    const dLon = lonRad2 - lonRad1;
+    
+    // Haversine formula
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(latRad1) * Math.cos(latRad2) * 
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = earthRadiusMiles * c;
+    
+    return distance;
+  }
+
+  // Get exercises for local leaderboard by type
+  async getLocalLeaderboardByExerciseType(
+    userId: number, 
+    type: ExerciseType, 
+    radiusMiles: number = 5, 
+    limit: number = 10
+  ): Promise<Exercise[]> {
+    try {
+      // Get current user's location
+      const currentUser = await this.getUser(userId);
+      if (!currentUser || !currentUser.latitude || !currentUser.longitude) {
+        console.error('User location not available');
+        return [];
+      }
+      
+      // Get all completed exercises of this type with valid points
+      const allExercises = await db.select({
+        exercise: exercises,
+        user: users
+      })
+      .from(exercises)
+      .innerJoin(users, eq(exercises.userId, users.id))
+      .where(
+        and(
+          eq(exercises.type, type),
+          eq(exercises.status, 'completed'),
+          sql`${exercises.points} IS NOT NULL`,
+          // Exclude exercises where user has no location
+          sql`${users.latitude} IS NOT NULL`,
+          sql`${users.longitude} IS NOT NULL`
+        )
+      );
+      
+      // Filter by distance and map to return only the exercise object
+      const localExercises = allExercises
+        .filter(row => {
+          if (!row.user.latitude || !row.user.longitude) return false;
+          
+          const distance = this.calculateDistance(
+            currentUser.latitude,
+            currentUser.longitude,
+            row.user.latitude,
+            row.user.longitude
+          );
+          
+          return distance <= radiusMiles;
+        })
+        .map(row => row.exercise);
+      
+      // Sort by points and limit results
+      return localExercises
+        .sort((a, b) => (b.points || 0) - (a.points || 0))
+        .slice(0, limit);
+    } catch (error) {
+      console.error('Error in getLocalLeaderboardByExerciseType:', error);
+      return [];
+    }
+  }
+
+  // Get local overall leaderboard
+  async getLocalOverallLeaderboard(
+    userId: number, 
+    radiusMiles: number = 5, 
+    limit: number = 10
+  ): Promise<{ userId: number, username: string, totalPoints: number, distance: number }[]> {
+    try {
+      // Get current user's location
+      const currentUser = await this.getUser(userId);
+      if (!currentUser || !currentUser.latitude || !currentUser.longitude) {
+        console.error('User location not available');
+        return [];
+      }
+      
+      // Get all users with location
+      const usersWithLocation = await db.select().from(users)
+        .where(
+          and(
+            sql`${users.latitude} IS NOT NULL`,
+            sql`${users.longitude} IS NOT NULL`
+          )
+        );
+      
+      // Calculate distance for each user and filter by radius
+      const nearbyUsers = usersWithLocation.map(user => {
+        if (!user.latitude || !user.longitude) return null;
+        
+        const distance = this.calculateDistance(
+          currentUser.latitude,
+          currentUser.longitude,
+          user.latitude,
+          user.longitude
+        );
+        
+        return { ...user, distance };
+      })
+      .filter((user): user is User & { distance: number } => 
+        user !== null && user.distance <= radiusMiles
+      );
+      
+      // If no nearby users, return empty array
+      if (nearbyUsers.length === 0) {
+        return [];
+      }
+      
+      // Get total points for each nearby user
+      const userPointsPromises = nearbyUsers.map(async user => {
+        // Get sum of points for completed exercises
+        const pointsResult = await db.select({
+          totalPoints: sql<number>`COALESCE(sum(${exercises.points}), 0)`,
+        })
+        .from(exercises)
+        .where(
+          and(
+            eq(exercises.userId, user.id),
+            eq(exercises.status, 'completed')
+          )
+        );
+        
+        const totalPoints = pointsResult[0]?.totalPoints || 0;
+        
+        return {
+          userId: user.id,
+          username: user.username,
+          totalPoints,
+          distance: user.distance
+        };
+      });
+      
+      const userPoints = await Promise.all(userPointsPromises);
+      
+      // Sort by total points and limit
+      return userPoints
+        .sort((a, b) => b.totalPoints - a.totalPoints)
+        .slice(0, limit);
+    } catch (error) {
+      console.error('Error in getLocalOverallLeaderboard:', error);
       return [];
     }
   }

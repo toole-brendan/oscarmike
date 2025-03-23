@@ -304,6 +304,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
+  
+  // Local leaderboard routes
+  app.get(`${api}/local-leaderboard/:type`, async (req: Request, res: Response) => {
+    try {
+      const type = req.params.type as ExerciseType;
+      const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
+      const radius = req.query.radius ? parseFloat(req.query.radius as string) : 5; // Default 5 miles
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+      
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+      
+      if (!['pushups', 'pullups', 'situps', 'run'].includes(type)) {
+        return res.status(400).json({ message: "Invalid exercise type" });
+      }
+      
+      if (isNaN(radius) || radius < 0.1 || radius > 50) {
+        return res.status(400).json({ message: "Invalid radius parameter (must be between 0.1 and 50 miles)" });
+      }
+      
+      if (isNaN(limit) || limit < 1 || limit > 100) {
+        return res.status(400).json({ message: "Invalid limit parameter" });
+      }
+      
+      const leaderboard = await storage.getLocalLeaderboardByExerciseType(userId, type, radius, limit);
+      return res.json(leaderboard);
+    } catch (error) {
+      console.error('Error getting local leaderboard:', error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get(`${api}/local-leaderboard`, async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
+      const radius = req.query.radius ? parseFloat(req.query.radius as string) : 5; // Default 5 miles
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+      
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+      
+      if (isNaN(radius) || radius < 0.1 || radius > 50) {
+        return res.status(400).json({ message: "Invalid radius parameter (must be between 0.1 and 50 miles)" });
+      }
+      
+      if (isNaN(limit) || limit < 1 || limit > 100) {
+        return res.status(400).json({ message: "Invalid limit parameter" });
+      }
+      
+      const overallLeaderboard = await storage.getLocalOverallLeaderboard(userId, radius, limit);
+      return res.json(overallLeaderboard);
+    } catch (error) {
+      console.error('Error getting local overall leaderboard:', error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  // Update user location
+  app.patch(`${api}/users/:userId/location`, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const { latitude, longitude } = req.body;
+      
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: "Invalid user ID" });
+      }
+      
+      if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+        return res.status(400).json({ message: "Latitude and longitude must be numbers" });
+      }
+      
+      // Validate latitude and longitude ranges
+      if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        return res.status(400).json({ message: "Invalid latitude or longitude values" });
+      }
+      
+      const updatedUser = await storage.updateUserLocation(userId, latitude, longitude);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      return res.json({
+        userId: updatedUser.id,
+        username: updatedUser.username,
+        latitude: updatedUser.latitude,
+        longitude: updatedUser.longitude
+      });
+    } catch (error) {
+      console.error('Error updating user location:', error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
 
   app.get(`${api}/users/:userId/history/:type`, async (req: Request, res: Response) => {
     try {
