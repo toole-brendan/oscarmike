@@ -6,6 +6,7 @@ import CircularProgress from '@/components/ui/circular-progress';
 import ExerciseCard from '@/components/ui/exercise-card';
 import { useLocation } from 'wouter';
 import { useToast } from '@/hooks/use-toast';
+import { apiRequestObject } from '@/lib/queryClient';
 
 const Dashboard: React.FC = () => {
   const [_, navigate] = useLocation();
@@ -33,7 +34,7 @@ const Dashboard: React.FC = () => {
   
   // If user data is not loaded yet or if user is not authenticated, show loading or redirect
   if (!userData) {
-    return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
+    return <div className="flex justify-center items-center min-h-screen">Loading user data...</div>;
   }
   
   const userId = userData.id;
@@ -42,17 +43,15 @@ const Dashboard: React.FC = () => {
   const { data: exercises, isLoading } = useQuery({
     queryKey: [`/api/users/${userId}/exercises`],
     queryFn: async () => {
-      // Initialize with default exercises if none exist
-      const response = await fetch(`/api/users/${userId}/exercises`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch exercises');
-      }
-      
-      const data = await response.json();
+      // Get exercises for this user
+      const exercisesData = await apiRequestObject({
+        url: `/api/users/${userId}/exercises`,
+        method: 'GET',
+        on401: 'throw'
+      });
       
       // If no exercises exist, create default ones
-      if (data.length === 0) {
+      if (exercisesData.length === 0) {
         const defaultExercises: Partial<Exercise>[] = [];
         
         for (const type of exerciseTypes) {
@@ -69,28 +68,24 @@ const Dashboard: React.FC = () => {
           });
         }
         
-        // Create default exercises
-        return Promise.all(
+        // Create default exercises using Promise.all
+        const createdExercises = await Promise.all(
           defaultExercises.map(async (exercise) => {
-            const response = await fetch('/api/exercises', {
+            return apiRequestObject({
+              url: '/api/exercises',
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(exercise),
+              body: exercise,
+              on401: 'throw'
             });
-            
-            if (!response.ok) {
-              throw new Error(`Failed to create ${exercise.type} exercise`);
-            }
-            
-            return response.json();
           })
         );
+        
+        return createdExercises;
       }
       
-      return data;
+      return exercisesData;
     },
+    enabled: !!userId, // Only run the query if userId is available
   });
   
   // Get the latest exercise for each type
@@ -165,13 +160,17 @@ const Dashboard: React.FC = () => {
             const exercise = getLatestExerciseByType(type);
             let percentage = 0;
             
-            if (exercise && exercise.status === 'completed') {
-              // Arbitrary percentages for demo
-              switch (type) {
-                case 'pushups': percentage = 75; break;
-                case 'pullups': percentage = 50; break;
-                case 'situps': percentage = 90; break;
-                case 'run': percentage = 65; break;
+            if (exercise) {
+              // Calculate real percentages based on exercise data
+              if (exercise.status === 'completed') {
+                // For completed exercises, calculate based on points
+                if (exercise.points !== null) {
+                  // Assuming max points per exercise is 100
+                  percentage = Math.min(100, Math.round((exercise.points / 100) * 100));
+                }
+              } else if (exercise.status === 'in_progress') {
+                // For in-progress exercises, show 50%
+                percentage = 50;
               }
             }
             
