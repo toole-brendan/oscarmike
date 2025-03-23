@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { initPoseDetector, detectPoses, drawSkeleton } from '@/lib/pose-detection';
+import { Camera, RefreshCw } from 'lucide-react';
 
 interface WebcamProps {
   onPoseDetected?: (pose: any) => void;
@@ -192,22 +193,24 @@ const Webcam: React.FC<WebcamProps> = ({
   
   return (
     <div className={`relative ${className}`}>
-      <div className="camera-container bg-gray-900 relative overflow-hidden rounded-lg">
+      <div className="camera-container bg-gray-900 relative overflow-hidden rounded-lg" style={{ minHeight: '400px' }}>
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="w-full h-full object-cover"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: isCameraActive ? 'block' : 'none' }}
           onPlay={() => setIsCameraActive(true)}
         />
         <canvas
           ref={canvasRef}
           className="absolute top-0 left-0 w-full h-full skeleton-overlay"
+          style={{ display: isCameraActive ? 'block' : 'none' }}
         />
         
         {!isCameraActive && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800 bg-opacity-80 text-white p-4">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800 text-white p-4">
+            <Camera className="h-16 w-16 mb-4 text-gray-400" />
             <div className="mb-4 text-center">
               <h3 className="text-lg font-bold mb-2">Camera Access Required</h3>
               <p className="text-sm text-gray-300">
@@ -216,8 +219,9 @@ const Webcam: React.FC<WebcamProps> = ({
             </div>
             <Button 
               onClick={startCamera}
-              className="bg-primary"
+              className="bg-primary flex items-center"
             >
+              <Camera className="h-4 w-4 mr-2" />
               Enable Camera
             </Button>
           </div>
@@ -240,15 +244,36 @@ const Webcam: React.FC<WebcamProps> = ({
               variant="default"
               size="sm"
               onClick={startCamera}
-              className="text-sm"
+              className="text-sm flex items-center"
             >
+              <Camera className="h-4 w-4 mr-1" />
               Start Camera
+            </Button>
+          )}
+          
+          {isCameraActive && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                if (videoRef.current && videoRef.current.srcObject) {
+                  const stream = videoRef.current.srcObject as MediaStream;
+                  stream.getTracks().forEach(track => track.stop());
+                  setIsCameraActive(false);
+                  startCamera();
+                }
+              }}
+              className="text-sm flex items-center"
+              title="Restart camera"
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh
             </Button>
           )}
           
           {devices.length > 1 && isCameraActive && (
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
               onClick={switchCamera}
               className="text-sm"

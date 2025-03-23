@@ -118,6 +118,9 @@ const Exercise: React.FC = () => {
   // Mutation for saving exercise results
   const saveMutation = useMutation({
     mutationFn: async () => {
+      // For timestamp type, we can just pass a Date object
+      // The serialization in the API will handle conversion correctly
+      
       const exerciseData = {
         userId: 1, // Hardcoded for demo
         type: exerciseType,
@@ -125,7 +128,7 @@ const Exercise: React.FC = () => {
         repCount: exerciseType !== 'run' ? repCount : null,
         formScore: Math.round(formScore),
         runTime: exerciseType === 'run' ? timeRemaining : null,
-        completedAt: new Date(),
+        completedAt: new Date().toISOString(),  // ISO string format
         points: calculatePoints(),
       };
       
