@@ -290,55 +290,134 @@ export class DatabaseStorage implements IStorage {
   
   // Leaderboard methods
   async getLeaderboardByExerciseType(type: ExerciseType, limit: number = 10): Promise<Exercise[]> {
-    return db.select()
-      .from(exercises)
-      .where(eq(exercises.type, type))
-      .where(eq(exercises.status, 'completed'))
-      .orderBy(desc(exercises.points))
-      .limit(limit);
+    try {
+      // First check if there are any completed exercises of this type
+      const exerciseCount = await db.select({ count: count() })
+        .from(exercises)
+        .where(
+          and(
+            eq(exercises.type, type),
+            eq(exercises.status, 'completed')
+          )
+        );
+      
+      // If no completed exercises, return empty array
+      if (exerciseCount[0].count === 0) {
+        return [];
+      }
+      
+      return await db.select()
+        .from(exercises)
+        .where(
+          and(
+            eq(exercises.type, type),
+            eq(exercises.status, 'completed'),
+            // Ensure points is not null
+            sql`${exercises.points} IS NOT NULL`
+          )
+        )
+        .orderBy(desc(exercises.points))
+        .limit(limit);
+    } catch (error) {
+      console.error('Error in getLeaderboardByExerciseType:', error);
+      // Return empty array on error
+      return [];
+    }
   }
   
   async getOverallLeaderboard(limit: number = 10): Promise<{ userId: number, username: string, totalPoints: number }[]> {
-    const result = await db.select({
-      userId: exercises.userId,
-      totalPoints: sql<number>`sum(${exercises.points})`,
-    })
-    .from(exercises)
-    .where(eq(exercises.status, 'completed'))
-    .groupBy(exercises.userId)
-    .orderBy(desc(sql<number>`sum(${exercises.points})`))
-    .limit(limit);
-    
-    // Get usernames for the results
-    const userIds = result.map(r => r.userId);
-    const userRecords = await db.select().from(users)
-      .where(sql`${users.id} IN (${userIds.join(',')})`);
-    
-    // Create a map of userId to username
-    const usernameMap = Object.fromEntries(
-      userRecords.map(user => [user.id, user.username])
-    );
-    
-    // Add username to each result
-    return result.map(r => ({
-      userId: r.userId,
-      username: usernameMap[r.userId] || 'Unknown User',
-      totalPoints: r.totalPoints
-    }));
+    try {
+      // First check if there are any completed exercises
+      const exerciseCount = await db.select({ count: count() })
+        .from(exercises)
+        .where(eq(exercises.status, 'completed'));
+      
+      // If no completed exercises, return empty array
+      if (exerciseCount[0].count === 0) {
+        return [];
+      }
+      
+      const result = await db.select({
+        userId: exercises.userId,
+        totalPoints: sql<number>`COALESCE(sum(${exercises.points}), 0)`,
+      })
+      .from(exercises)
+      .where(eq(exercises.status, 'completed'))
+      .groupBy(exercises.userId)
+      .orderBy(desc(sql<number>`COALESCE(sum(${exercises.points}), 0)`))
+      .limit(limit);
+      
+      // If no results, return empty array
+      if (result.length === 0) {
+        return [];
+      }
+      
+      // Get usernames for the results
+      const userIds = result.map(r => r.userId).filter(id => id !== null && id !== undefined);
+      
+      // If no valid userIds, return empty array
+      if (userIds.length === 0) {
+        return [];
+      }
+      
+      // Get user records with individual queries to avoid SQL IN clause issues
+      const userPromises = userIds.map(id => 
+        db.select().from(users).where(eq(users.id, id)).then(results => results[0])
+      );
+      const userRecords = await Promise.all(userPromises);
+      
+      // Create a map of userId to username
+      const usernameMap = Object.fromEntries(
+        userRecords.filter(Boolean).map(user => [user.id, user.username])
+      );
+      
+      // Add username to each result
+      return result.map(r => ({
+        userId: r.userId,
+        username: usernameMap[r.userId] || 'Unknown User',
+        totalPoints: r.totalPoints || 0
+      }));
+    } catch (error) {
+      console.error('Error in getOverallLeaderboard:', error);
+      // Return empty array on error
+      return [];
+    }
   }
   
   async getUserHistory(userId: number, type: ExerciseType, limit: number = 10): Promise<Exercise[]> {
-    return db.select()
-      .from(exercises)
-      .where(
-        and(
-          eq(exercises.userId, userId),
-          eq(exercises.type, type),
-          eq(exercises.status, 'completed')
+    try {
+      // Check if there are any completed exercises for this user and type
+      const exerciseCount = await db.select({ count: count() })
+        .from(exercises)
+        .where(
+          and(
+            eq(exercises.userId, userId),
+            eq(exercises.type, type),
+            eq(exercises.status, 'completed')
+          )
+        );
+      
+      // If no completed exercises, return empty array
+      if (exerciseCount[0].count === 0) {
+        return [];
+      }
+      
+      return await db.select()
+        .from(exercises)
+        .where(
+          and(
+            eq(exercises.userId, userId),
+            eq(exercises.type, type),
+            eq(exercises.status, 'completed')
+          )
         )
-      )
-      .orderBy(desc(exercises.completedAt))
-      .limit(limit);
+        .orderBy(desc(exercises.completedAt))
+        .limit(limit);
+    } catch (error) {
+      console.error('Error in getUserHistory:', error);
+      // Return empty array on error
+      return [];
+    }
   }
 }
 
