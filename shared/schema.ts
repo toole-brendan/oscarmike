@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, real, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -19,17 +19,36 @@ export type ExerciseType = typeof exerciseTypes[number];
 export const exerciseStatus = ['not_started', 'in_progress', 'completed'] as const;
 export type ExerciseStatus = typeof exerciseStatus[number];
 
-export const exercises = pgTable("exercises", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id),
-  type: text("type", { enum: exerciseTypes }).notNull(),
-  status: text("status", { enum: exerciseStatus }).notNull().default('not_started'),
-  repCount: integer("rep_count"),
-  formScore: integer("form_score"),
-  runTime: integer("run_time"),
-  completedAt: timestamp("completed_at"),
-  points: integer("points"),
-});
+export const exercises = pgTable(
+  "exercises", 
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull().references(() => users.id),
+    type: text("type", { enum: exerciseTypes }).notNull(),
+    status: text("status", { enum: exerciseStatus }).notNull().default('not_started'),
+    repCount: integer("rep_count"),
+    formScore: integer("form_score"),
+    runTime: integer("run_time"),
+    completedAt: timestamp("completed_at"),
+    points: integer("points"),
+    // Add created_at for proper time-series data management
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => {
+    return {
+      // Index for querying user's exercises (most common query)
+      userIdIdx: index("user_id_idx").on(table.userId),
+      // Composite index for filtering by user and exercise type
+      userTypeIdx: index("user_type_idx").on(table.userId, table.type),
+      // Index for filtering by exercise type (for leaderboards)
+      typeIdx: index("type_idx").on(table.type),
+      // Index for time-based queries
+      completedAtIdx: index("completed_at_idx").on(table.completedAt),
+      // Composite index for leaderboard queries (by type and points)
+      leaderboardIdx: index("leaderboard_idx").on(table.type, table.points),
+    };
+  }
+);
 
 export const insertExerciseSchema = createInsertSchema(exercises).pick({
   userId: true,
@@ -42,13 +61,24 @@ export const insertExerciseSchema = createInsertSchema(exercises).pick({
   points: true,
 });
 
-export const formIssues = pgTable("form_issues", {
-  id: serial("id").primaryKey(),
-  exerciseId: integer("exercise_id").notNull().references(() => exercises.id),
-  issue: text("issue").notNull(),
-  severity: text("severity").notNull(),
-  timestamp: timestamp("timestamp").notNull(),
-});
+export const formIssues = pgTable(
+  "form_issues", 
+  {
+    id: serial("id").primaryKey(),
+    exerciseId: integer("exercise_id").notNull().references(() => exercises.id),
+    issue: text("issue").notNull(),
+    severity: text("severity").notNull(),
+    timestamp: timestamp("timestamp").notNull(),
+  },
+  (table) => {
+    return {
+      // Index for querying form issues by exercise
+      exerciseIdIdx: index("form_issues_exercise_id_idx").on(table.exerciseId),
+      // Index for time-based queries
+      timestampIdx: index("form_issues_timestamp_idx").on(table.timestamp),
+    };
+  }
+);
 
 export const insertFormIssueSchema = createInsertSchema(formIssues).pick({
   exerciseId: true,
