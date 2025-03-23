@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Exercise, ExerciseType, ExerciseStatus, exerciseTypes } from '@shared/schema';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,6 +14,8 @@ const Dashboard: React.FC = () => {
   
   // Get authenticated user data from localStorage
   const [userData, setUserData] = useState<{id: number, username: string} | null>(null);
+  // State to track if we should fetch exercises
+  const [userId, setUserId] = useState<number | null>(null);
   
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -21,6 +23,7 @@ const Dashboard: React.FC = () => {
       try {
         const parsedUser = JSON.parse(storedUser);
         setUserData(parsedUser);
+        setUserId(parsedUser.id);
       } catch (error) {
         console.error('Error parsing user data:', error);
         localStorage.removeItem('user');
@@ -32,17 +35,12 @@ const Dashboard: React.FC = () => {
     }
   }, [navigate]);
   
-  // If user data is not loaded yet or if user is not authenticated, show loading or redirect
-  if (!userData) {
-    return <div className="flex justify-center items-center min-h-screen">Loading user data...</div>;
-  }
-  
-  const userId = userData.id;
-  
   // Fetch user exercises
   const { data: exercises, isLoading } = useQuery({
     queryKey: [`/api/users/${userId}/exercises`],
     queryFn: async () => {
+      if (!userId) return [];
+      
       // Get exercises for this user
       const exercisesData = await apiRequestObject({
         url: `/api/users/${userId}/exercises`,
@@ -88,11 +86,22 @@ const Dashboard: React.FC = () => {
     enabled: !!userId, // Only run the query if userId is available
   });
   
+  // For debugging
+  console.log('Exercises data:', exercises);
+  
   // Get the latest exercise for each type
   const getLatestExerciseByType = (type: ExerciseType): Exercise | undefined => {
     if (!exercises) return undefined;
     
-    const typeExercises = exercises.filter((e: Exercise) => e.type === type);
+    // Check if exercises is not an array, handle the case where it might be data.data
+    const exercisesArray = exercises.data ? exercises.data : exercises;
+    
+    if (!Array.isArray(exercisesArray)) {
+      console.log('Exercises is not an array:', exercisesArray);
+      return undefined;
+    }
+    
+    const typeExercises = exercisesArray.filter((e: Exercise) => e.type === type);
     return typeExercises.length > 0 ? typeExercises[0] : undefined;
   };
   
@@ -100,7 +109,15 @@ const Dashboard: React.FC = () => {
   const calculateOverallScore = (): { score: number, max: number } => {
     if (!exercises) return { score: 0, max: 0 };
     
-    const completedExercises = exercises.filter((e: Exercise) => e.status === 'completed');
+    // Check if exercises is not an array, handle the case where it might be data.data
+    const exercisesArray = exercises.data ? exercises.data : exercises;
+    
+    if (!Array.isArray(exercisesArray)) {
+      console.log('Exercises is not an array in calculateOverallScore:', exercisesArray);
+      return { score: 0, max: 0 };
+    }
+    
+    const completedExercises = exercisesArray.filter((e: Exercise) => e.status === 'completed');
     const totalPoints = completedExercises.reduce((sum: number, e: Exercise) => sum + (e.points || 0), 0);
     
     return { score: totalPoints, max: 300 };
@@ -138,6 +155,11 @@ const Dashboard: React.FC = () => {
   
   const { score, max } = calculateOverallScore();
   const scorePercentage = max > 0 ? Math.round((score / max) * 100) : 0;
+  
+  // Show loading state if user data is not loaded yet or if user is not authenticated
+  if (!userData || !userId) {
+    return <div className="flex justify-center items-center min-h-screen">Loading user data...</div>;
+  }
   
   // Show loading state while fetching exercises
   if (isLoading) {
