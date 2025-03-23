@@ -5,9 +5,38 @@ import { insertExerciseSchema, insertFormIssueSchema, insertKeyPointsSchema, ins
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 
+// Login schema for validating login requests
+const loginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // prefix all routes with /api
   const api = "/api";
+  
+  // Login route
+  app.post(`${api}/login`, async (req: Request, res: Response) => {
+    try {
+      const loginData = loginSchema.parse(req.body);
+      const user = await storage.getUserByUsername(loginData.username);
+      
+      if (!user || user.password !== loginData.password) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+      
+      // Return user data (except password) for the client
+      const { password, ...userData } = user;
+      return res.status(200).json(userData);
+    } catch (error) {
+      console.error('Error during login:', error);
+      
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: fromZodError(error).message });
+      }
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
   
   // User routes
   app.post(`${api}/users`, async (req: Request, res: Response) => {

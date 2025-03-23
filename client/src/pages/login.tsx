@@ -4,6 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useLocation } from 'wouter';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
+import { useMutation } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -37,23 +39,36 @@ const Login: React.FC = () => {
     },
   });
   
-  const onSubmit = async (values: LoginFormValues) => {
-    try {
-      // For now, we'll just automatically log in users as user ID 1
-      // In a real app, this would verify credentials against the server
+  const loginMutation = useMutation({
+    mutationFn: async (values: LoginFormValues) => {
+      return apiRequest({
+        url: `/api/login`,
+        method: 'POST',
+        body: values,
+      });
+    },
+    onSuccess: (data) => {
+      // Store user data in localStorage
+      localStorage.setItem('user', JSON.stringify(data));
+      
       toast({
         title: 'Login successful',
         description: 'Welcome back!',
         variant: 'default',
       });
       navigate('/');
-    } catch (error) {
+    },
+    onError: (error) => {
       toast({
         title: 'Login failed',
         description: 'Invalid username or password',
         variant: 'destructive',
       });
-    }
+    },
+  });
+  
+  const onSubmit = (values: LoginFormValues) => {
+    loginMutation.mutate(values);
   };
   
   return (
