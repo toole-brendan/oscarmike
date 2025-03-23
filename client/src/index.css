@@ -3,11 +3,60 @@
 @tailwind utilities;
 
 @layer base {
+  @font-face {
+    font-family: 'Helvetica Neue Light';
+    src: local('Helvetica Neue Light'), local('HelveticaNeue-Light');
+    font-weight: 300;
+    font-style: normal;
+  }
+
+  @font-face {
+    font-family: 'DIN Condensed';
+    src: local('DIN Condensed'), local('DINCondensed-Bold');
+    font-weight: bold;
+    font-style: normal;
+  }
+
   * {
     @apply border-border;
   }
 
+  :root {
+    --letter-spacing-tight: -0.025em;
+    --letter-spacing-wide: 0.05em;
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    letter-spacing: var(--letter-spacing-tight);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight;
+    letter-spacing: var(--letter-spacing-tight);
+    text-transform: uppercase;
+  }
+
+  code, pre {
+    @apply font-mono;
+    letter-spacing: normal;
+  }
+
+  button, .button {
+    @apply font-display uppercase tracking-wide;
+    letter-spacing: var(--letter-spacing-wide);
+  }
+
+  /* Ultra-modernist Styling */
+  .card {
+    @apply border-0 shadow-none;
+  }
+
+  .input, .select, .textarea {
+    @apply border-0 border-b border-border rounded-none;
+  }
+
+  .btn, .button {
+    @apply rounded-none;
   }
 }
