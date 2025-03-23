@@ -22,6 +22,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.createUser(userData);
       return res.status(201).json(user);
     } catch (error) {
+      console.error('Error creating user:', error);
+      
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: fromZodError(error).message });
       }

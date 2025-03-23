@@ -48,20 +48,38 @@ const Webcam: React.FC<WebcamProps> = ({
   useEffect(() => {
     const getDevices = async () => {
       try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        setDevices(videoDevices);
-        
-        if (videoDevices.length > 0 && !selectedDeviceId) {
-          setSelectedDeviceId(videoDevices[0].deviceId);
-        }
+        // First request camera access to get permission
+        await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          .then((stream) => {
+            // Stop tracks immediately
+            stream.getTracks().forEach(track => track.stop());
+            
+            // Now enumerate devices
+            return navigator.mediaDevices.enumerateDevices();
+          })
+          .then((devices) => {
+            console.log("Available devices:", devices);
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            console.log("Available video devices:", videoDevices);
+            
+            setDevices(videoDevices);
+            
+            if (videoDevices.length > 0 && !selectedDeviceId) {
+              setSelectedDeviceId(videoDevices[0].deviceId);
+            }
+          });
       } catch (error) {
         console.error('Error getting media devices:', error);
+        toast({
+          title: 'Cannot access camera',
+          description: 'Please allow camera access in your browser settings.',
+          variant: 'destructive',
+        });
       }
     };
     
     getDevices();
-  }, [selectedDeviceId]);
+  }, []);
   
   // Start camera when ready
   useEffect(() => {
@@ -83,26 +101,36 @@ const Webcam: React.FC<WebcamProps> = ({
     
     try {
       const constraints = {
+        audio: false,
         video: {
-          deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+          facingMode: "user",
           width: { ideal: width },
           height: { ideal: height },
         }
       };
       
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      videoRef.current.srcObject = stream;
-      setIsCameraActive(true);
+      console.log("Attempting to access camera with constraints:", constraints);
       
-      // Start pose detection loop
-      detectPoseLoop();
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("Camera access granted:", stream);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          console.log("Video metadata loaded, playing video");
+          if (videoRef.current) videoRef.current.play();
+          setIsCameraActive(true);
+          // Start pose detection loop
+          detectPoseLoop();
+        };
+      }
     } catch (error) {
+      console.error('Error accessing camera:', error);
       toast({
         title: 'Camera access denied',
         description: 'Please grant camera permission to use this feature.',
         variant: 'destructive',
       });
-      console.error('Error accessing camera:', error);
     }
   };
   
@@ -177,6 +205,23 @@ const Webcam: React.FC<WebcamProps> = ({
           ref={canvasRef}
           className="absolute top-0 left-0 w-full h-full skeleton-overlay"
         />
+        
+        {!isCameraActive && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800 bg-opacity-80 text-white p-4">
+            <div className="mb-4 text-center">
+              <h3 className="text-lg font-bold mb-2">Camera Access Required</h3>
+              <p className="text-sm text-gray-300">
+                This exercise requires camera access for pose detection.
+              </p>
+            </div>
+            <Button 
+              onClick={startCamera}
+              className="bg-primary"
+            >
+              Enable Camera
+            </Button>
+          </div>
+        )}
       </div>
       
       <div className="mt-4 flex items-center justify-between">
@@ -189,16 +234,29 @@ const Webcam: React.FC<WebcamProps> = ({
           </span>
         </div>
         
-        {devices.length > 1 && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={switchCamera}
-            className="text-sm"
-          >
-            Switch Camera
-          </Button>
-        )}
+        <div className="flex space-x-2">
+          {!isCameraActive && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={startCamera}
+              className="text-sm"
+            >
+              Start Camera
+            </Button>
+          )}
+          
+          {devices.length > 1 && isCameraActive && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={switchCamera}
+              className="text-sm"
+            >
+              Switch Camera
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
