@@ -1,16 +1,20 @@
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { ExerciseType, exerciseTypes } from '@shared/schema';
 import { apiRequestObject } from '@/lib/queryClient';
+import { AlertTriangle, MapPin, Globe, Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 type LeaderboardUser = {
   userId: number;
   username: string;
   totalPoints: number;
+  distance?: number;
 };
 
 type LeaderboardExercise = {
@@ -27,9 +31,93 @@ type LeaderboardExercise = {
 
 const Leaderboard: React.FC = () => {
   const [selectedTab, setSelectedTab] = useState<'overall' | ExerciseType>('overall');
+  const [userId, setUserId] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<'global' | 'local'>('global');
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  // Fetch overall leaderboard data
-  const { data: overallLeaderboard, isLoading: overallLoading } = useQuery({
+  // Try to get user ID from local storage for demo purposes
+  useEffect(() => {
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser);
+        if (parsed && parsed.id) {
+          setUserId(parsed.id);
+        }
+      } catch (e) {
+        console.error('Error parsing stored user', e);
+      }
+    }
+  }, []);
+
+  // Mutation for updating user location
+  const locationMutation = useMutation({
+    mutationFn: async (location: { latitude: number; longitude: number }) => {
+      if (!userId) {
+        throw new Error("No user ID available");
+      }
+      return apiRequestObject({
+        url: `/api/users/${userId}/location`,
+        method: 'PATCH',
+        body: location,
+        on401: 'throw'
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Location updated",
+        description: "Your location has been updated for local leaderboards.",
+        variant: "default"
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/local-leaderboard'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/local-leaderboard', selectedTab] });
+    },
+    onError: (error) => {
+      console.error('Error updating location:', error);
+      toast({
+        title: "Error updating location",
+        description: "Could not update your location. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Function to get user's location and update it
+  const updateUserLocation = () => {
+    if (!userId) {
+      setLocationError("You need to be logged in to use local leaderboards");
+      return;
+    }
+
+    setIsUpdatingLocation(true);
+    setLocationError(null);
+
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser");
+      setIsUpdatingLocation(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        locationMutation.mutate({ latitude, longitude });
+        setIsUpdatingLocation(false);
+      },
+      (error) => {
+        console.error("Error getting location:", error);
+        setLocationError("Could not get your location. Please enable location services and try again.");
+        setIsUpdatingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  // Fetch global overall leaderboard data
+  const { data: globalOverallLeaderboard, isLoading: globalOverallLoading } = useQuery({
     queryKey: ['/api/leaderboard'],
     queryFn: async () => {
       return apiRequestObject({
@@ -40,8 +128,8 @@ const Leaderboard: React.FC = () => {
     }
   });
 
-  // Fetch exercise-specific leaderboard data
-  const { data: exerciseLeaderboard, isLoading: exerciseLoading } = useQuery({
+  // Fetch global exercise-specific leaderboard data
+  const { data: globalExerciseLeaderboard, isLoading: globalExerciseLoading } = useQuery({
     queryKey: ['/api/leaderboard', selectedTab],
     queryFn: async () => {
       if (selectedTab === 'overall') return null;
@@ -55,7 +143,56 @@ const Leaderboard: React.FC = () => {
     enabled: selectedTab !== 'overall'
   });
 
-  const isLoading = overallLoading || (selectedTab !== 'overall' && exerciseLoading);
+  // Fetch local overall leaderboard data
+  const { data: localOverallLeaderboard, isLoading: localOverallLoading } = useQuery({
+    queryKey: ['/api/local-leaderboard'],
+    queryFn: async () => {
+      if (!userId) {
+        throw new Error("No user ID available");
+      }
+      
+      return apiRequestObject({
+        url: `/api/local-leaderboard?userId=${userId}`,
+        method: 'GET',
+        on401: 'throw'
+      }) as Promise<LeaderboardUser[]>;
+    },
+    enabled: viewMode === 'local' && userId !== null,
+    retry: false,
+    onError: (err) => {
+      console.error('Error fetching local overall leaderboard:', err);
+      setLocationError("Error fetching local leaderboard. You may need to update your location.");
+    }
+  });
+
+  // Fetch local exercise-specific leaderboard data
+  const { data: localExerciseLeaderboard, isLoading: localExerciseLoading } = useQuery({
+    queryKey: ['/api/local-leaderboard', selectedTab],
+    queryFn: async () => {
+      if (selectedTab === 'overall' || !userId) {
+        return null;
+      }
+      
+      return apiRequestObject({
+        url: `/api/local-leaderboard/${selectedTab}?userId=${userId}`,
+        method: 'GET',
+        on401: 'throw'
+      }) as Promise<LeaderboardExercise[]>;
+    },
+    enabled: viewMode === 'local' && selectedTab !== 'overall' && userId !== null,
+    retry: false,
+    onError: (err) => {
+      console.error('Error fetching local exercise leaderboard:', err);
+      setLocationError("Error fetching local leaderboard. You may need to update your location.");
+    }
+  });
+
+  const overallLeaderboard = viewMode === 'global' ? globalOverallLeaderboard : localOverallLeaderboard;
+  const exerciseLeaderboard = viewMode === 'global' ? globalExerciseLeaderboard : localExerciseLeaderboard;
+  
+  const isLoading = viewMode === 'global' 
+    ? (globalOverallLoading || (selectedTab !== 'overall' && globalExerciseLoading))
+    : (localOverallLoading || (selectedTab !== 'overall' && localExerciseLoading));
 
   // Format the run time from seconds to MM:SS
   const formatRunTime = (seconds: number | null): string => {
@@ -63,6 +200,12 @@ const Leaderboard: React.FC = () => {
     const minutes = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Format distance to show in miles with one decimal place
+  const formatDistance = (distance: number | undefined): string => {
+    if (distance === undefined) return 'N/A';
+    return `${distance.toFixed(1)} mi`;
   };
 
   // Get user rank badge based on position
@@ -87,6 +230,51 @@ const Leaderboard: React.FC = () => {
     <div className="container mx-auto py-8">
       <h1 className="text-2xl font-bold text-neutral-dark mb-6">PT Test Leaderboard</h1>
       
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div className="flex gap-2">
+          <Button 
+            variant={viewMode === 'global' ? 'default' : 'outline'} 
+            onClick={() => setViewMode('global')}
+            className="flex items-center gap-2"
+          >
+            <Globe className="h-4 w-4" />
+            Global
+          </Button>
+          <Button 
+            variant={viewMode === 'local' ? 'default' : 'outline'} 
+            onClick={() => setViewMode('local')}
+            className="flex items-center gap-2"
+          >
+            <MapPin className="h-4 w-4" />
+            Local (5 mi)
+          </Button>
+        </div>
+        
+        {viewMode === 'local' && (
+          <Button 
+            variant="outline" 
+            onClick={updateUserLocation}
+            disabled={isUpdatingLocation || !userId}
+            className="flex items-center gap-2"
+          >
+            {isUpdatingLocation ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+            Update My Location
+          </Button>
+        )}
+      </div>
+      
+      {viewMode === 'local' && locationError && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-6 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5" />
+          <div>
+            <p className="text-yellow-800 font-medium">{locationError}</p>
+            <p className="text-yellow-700 text-sm mt-1">
+              Local leaderboards require your location. Please update your location to see users in your area.
+            </p>
+          </div>
+        </div>
+      )}
+      
       <Tabs defaultValue="overall" value={selectedTab} onValueChange={(value) => setSelectedTab(value as 'overall' | ExerciseType)}>
         <TabsList className="mb-6">
           <TabsTrigger value="overall">Overall</TabsTrigger>
@@ -99,7 +287,14 @@ const Leaderboard: React.FC = () => {
         <TabsContent value="overall">
           <Card>
             <CardHeader>
-              <CardTitle>Overall Ranking</CardTitle>
+              <CardTitle>
+                {viewMode === 'global' ? 'Global Overall Ranking' : 'Local Overall Ranking'}
+              </CardTitle>
+              {viewMode === 'local' && (
+                <CardDescription>
+                  Users within 5 miles of your location
+                </CardDescription>
+              )}
             </CardHeader>
             <CardContent>
               <Table>
@@ -108,6 +303,9 @@ const Leaderboard: React.FC = () => {
                     <TableHead className="w-16">Rank</TableHead>
                     <TableHead>User</TableHead>
                     <TableHead className="text-right">Total Points</TableHead>
+                    {viewMode === 'local' && (
+                      <TableHead className="text-right">Distance</TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -117,12 +315,17 @@ const Leaderboard: React.FC = () => {
                         <TableCell className="font-medium">{getRankBadge(index)}</TableCell>
                         <TableCell>{entry.username}</TableCell>
                         <TableCell className="text-right font-semibold">{entry.totalPoints}</TableCell>
+                        {viewMode === 'local' && (
+                          <TableCell className="text-right">{formatDistance(entry.distance)}</TableCell>
+                        )}
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={3} className="text-center py-8 text-gray-500">
-                        No leaderboard data available yet.
+                      <TableCell colSpan={viewMode === 'local' ? 4 : 3} className="text-center py-8 text-gray-500">
+                        {viewMode === 'local' 
+                          ? "No local users found. Try updating your location or switching to global view."
+                          : "No leaderboard data available yet."}
                       </TableCell>
                     </TableRow>
                   )}
@@ -137,10 +340,16 @@ const Leaderboard: React.FC = () => {
             <Card>
               <CardHeader>
                 <CardTitle>
+                  {viewMode === 'global' ? 'Global ' : 'Local '}
                   {type === 'pushups' ? 'Push-ups' :
                    type === 'pullups' ? 'Pull-ups' :
                    type === 'situps' ? 'Sit-ups' : '2-Mile Run'} Ranking
                 </CardTitle>
+                {viewMode === 'local' && (
+                  <CardDescription>
+                    Users within 5 miles of your location
+                  </CardDescription>
+                )}
               </CardHeader>
               <CardContent>
                 <Table>
@@ -175,7 +384,9 @@ const Leaderboard: React.FC = () => {
                     ) : (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                          No {type} exercise data available yet.
+                          {viewMode === 'local'
+                            ? `No local ${type} exercise data available. Try updating your location or switching to global view.`
+                            : `No ${type} exercise data available yet.`}
                         </TableCell>
                       </TableRow>
                     )}
