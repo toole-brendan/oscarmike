@@ -101,29 +101,47 @@ const Webcam: React.FC<WebcamProps> = ({
     if (!videoRef.current) return;
     
     try {
+      // First reset any existing stream
+      if (videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+      }
+      
+      // Simple constraints first - try to get any video
       const constraints = {
         audio: false,
-        video: {
-          facingMode: "user",
-          width: { ideal: width },
-          height: { ideal: height },
-        }
+        video: true
       };
       
-      console.log("Attempting to access camera with constraints:", constraints);
+      console.log("Attempting to access camera with basic constraints:", constraints);
       
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log("Camera access granted:", stream);
       
+      // Only after we have a stream, apply size constraints
       if (videoRef.current) {
+        videoRef.current.style.width = '100%';
+        videoRef.current.style.height = '100%';
+        videoRef.current.style.display = 'block';
+        videoRef.current.style.objectFit = 'cover';
         videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          console.log("Video metadata loaded, playing video");
-          if (videoRef.current) videoRef.current.play();
+        
+        // Play video immediately
+        try {
+          await videoRef.current.play();
+          console.log("Video is now playing");
           setIsCameraActive(true);
           // Start pose detection loop
           detectPoseLoop();
-        };
+        } catch (playError) {
+          console.error("Error playing video:", playError);
+          toast({
+            title: 'Error starting video',
+            description: 'Could not play the camera stream. Please try again.',
+            variant: 'destructive',
+          });
+        }
       }
     } catch (error) {
       console.error('Error accessing camera:', error);
@@ -159,26 +177,45 @@ const Webcam: React.FC<WebcamProps> = ({
     
     if (!ctx) return;
     
+    // Wait for the video to be properly loaded
+    if (video.readyState < 2) {
+      console.log("Video not ready yet, waiting...");
+      setTimeout(detectPoseLoop, 100);
+      return;
+    }
+    
+    // Make sure the canvas dimensions match the video
+    canvas.width = video.videoWidth || width;
+    canvas.height = video.videoHeight || height;
+    
+    console.log(`Canvas dimensions set to: ${canvas.width}x${canvas.height}`);
+    
     const detectFrame = async () => {
-      if (!video.paused && !video.ended && video.readyState >= 2) {
-        // Set canvas dimensions to match video
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        
+      if (video.paused || video.ended || !isCameraActive) {
+        // If video is not playing or camera inactive, exit detection loop
+        console.log("Video paused/ended or camera inactive - stopping pose detection");
+        return;
+      }
+      
+      if (video.readyState >= 2) {
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Detect poses
-        const poses = await detectPoses(video);
-        
-        if (poses && poses.length > 0) {
-          // Draw skeleton
-          drawSkeleton(ctx, poses[0], canvas.width, canvas.height);
+        try {
+          // Detect poses
+          const poses = await detectPoses(video);
           
-          // Callback with pose data
-          if (onPoseDetected) {
-            onPoseDetected(poses[0]);
+          if (poses && poses.length > 0) {
+            // Draw skeleton
+            drawSkeleton(ctx, poses[0], canvas.width, canvas.height);
+            
+            // Callback with pose data
+            if (onPoseDetected) {
+              onPoseDetected(poses[0]);
+            }
           }
+        } catch (error) {
+          console.error('Error detecting poses:', error);
         }
       }
       
@@ -186,26 +223,40 @@ const Webcam: React.FC<WebcamProps> = ({
       requestAnimationFrame(detectFrame);
     };
     
-    video.onloadeddata = () => {
-      detectFrame();
-    };
+    // Start detection loop
+    console.log("Starting pose detection loop");
+    detectFrame();
   };
   
   return (
     <div className={`relative ${className}`}>
-      <div className="camera-container bg-gray-900 relative overflow-hidden rounded-lg" style={{ minHeight: '400px' }}>
+      <div className="camera-container bg-gray-900 relative overflow-hidden rounded-lg" style={{ minHeight: '400px', position: 'relative' }}>
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: isCameraActive ? 'block' : 'none' }}
+          style={{ 
+            width: '100%', 
+            height: '100%', 
+            objectFit: 'cover',
+            display: isCameraActive ? 'block' : 'none',
+            position: 'absolute',
+            zIndex: 1 
+          }}
           onPlay={() => setIsCameraActive(true)}
         />
         <canvas
           ref={canvasRef}
-          className="absolute top-0 left-0 w-full h-full skeleton-overlay"
-          style={{ display: isCameraActive ? 'block' : 'none' }}
+          style={{ 
+            position: 'absolute', 
+            top: 0, 
+            left: 0, 
+            width: '100%', 
+            height: '100%', 
+            zIndex: 2,
+            display: isCameraActive ? 'block' : 'none' 
+          }}
         />
         
         {!isCameraActive && (
