@@ -34,8 +34,8 @@ const Login: React.FC = () => {
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: '',
-      password: '',
+      username: process.env.NODE_ENV === 'development' ? 'Dev' : '',
+      password: process.env.NODE_ENV === 'development' ? 'password' : '',
     },
   });
   

@@ -12,10 +12,13 @@ import {
   type KeyPoints,
   type InsertKeyPoints,
   ExerciseType,
-  ExerciseStatus
+  ExerciseStatus,
+  runData,
+  insertRunDataSchema
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, asc, sql, count } from "drizzle-orm";
+import { eq, and, desc, asc, sql, count, isNotNull } from "drizzle-orm";
+import { cache } from './cache';
 
 // Define pagination interface for API responses
 export interface PaginatedResult<T> {
@@ -43,6 +46,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   getUsers(params?: PaginationParams): Promise<PaginatedResult<User>>;
   updateUserLocation(userId: number, latitude: number, longitude: number): Promise<User | undefined>;
+  updateUser(id: number, user: Partial<InsertUser>): Promise<User | undefined>;
   
   // Exercise methods
   getExercises(userId: number, params?: PaginationParams): Promise<PaginatedResult<Exercise>>;
@@ -67,6 +71,10 @@ export interface IStorage {
   // Local Leaderboard methods
   getLocalLeaderboardByExerciseType(userId: number, type: ExerciseType, radiusMiles?: number, limit?: number): Promise<Exercise[]>;
   getLocalOverallLeaderboard(userId: number, radiusMiles?: number, limit?: number): Promise<{ userId: number, username: string, totalPoints: number, distance: number }[]>;
+
+  // Run data methods
+  createRunData(data: typeof insertRunDataSchema._type): Promise<any>;
+  getRunDataByExerciseId(exerciseId: number): Promise<any | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -136,6 +144,15 @@ export class DatabaseStorage implements IStorage {
     const countQuery = db.select({ count: count() }).from(users);
     
     return this.paginateQuery<User>(query, countQuery, params);
+  }
+
+  async updateUser(id: number, userData: Partial<InsertUser>): Promise<User | undefined> {
+    const results = await db.update(users)
+      .set(userData)
+      .where(eq(users.id, id))
+      .returning();
+    
+    return results[0];
   }
 
   // Exercise methods
@@ -221,6 +238,7 @@ export class DatabaseStorage implements IStorage {
 
   async createExercise(insertExercise: InsertExercise): Promise<Exercise> {
     const results = await db.insert(exercises).values(insertExercise).returning();
+    await this.invalidateLeaderboardCaches();
     return results[0];
   }
 
@@ -229,6 +247,8 @@ export class DatabaseStorage implements IStorage {
       .set(exercise)
       .where(eq(exercises.id, id))
       .returning();
+    
+    await this.invalidateLeaderboardCaches();
     
     return results[0];
   }
@@ -294,107 +314,82 @@ export class DatabaseStorage implements IStorage {
   }
   
   // Leaderboard methods
-  async getLeaderboardByExerciseType(type: ExerciseType, limit: number = 10): Promise<(Exercise & { username: string })[]> {
-    try {
-      // First check if there are any completed exercises of this type
-      const exerciseCount = await db.select({ count: count() })
-        .from(exercises)
-        .where(
-          and(
-            eq(exercises.type, type),
-            eq(exercises.status, 'completed')
-          )
-        );
-      
-      // If no completed exercises, return empty array
-      if (exerciseCount[0].count === 0) {
-        return [];
-      }
-      
-      // Get exercises with user information
-      const result = await db
-        .select({
-          ...exercises,
-          username: users.username
-        })
-        .from(exercises)
-        .leftJoin(users, eq(exercises.userId, users.id))
-        .where(
-          and(
-            eq(exercises.type, type),
-            eq(exercises.status, 'completed'),
-            // Ensure points is not null
-            sql`${exercises.points} IS NOT NULL`
-          )
-        )
-        .orderBy(desc(exercises.points))
-        .limit(limit);
-      
-      return result;
-    } catch (error) {
-      console.error('Error in getLeaderboardByExerciseType:', error);
-      // Return empty array on error
-      return [];
+  async getLeaderboardByExerciseType(type: ExerciseType, limit?: number): Promise<Exercise[]> {
+    const cacheKey = `leaderboard:${type}:${limit || 10}`;
+    
+    // Try to get from cache first
+    const cachedResult = await cache.get<Exercise[]>(cacheKey);
+    if (cachedResult) {
+      console.log(`Cache hit for ${cacheKey}`);
+      return cachedResult;
     }
+    
+    // If not in cache, query the database
+    console.log(`Cache miss for ${cacheKey}, querying database`);
+    
+    const result = await db.select({
+      id: exercises.id,
+      userId: exercises.userId,
+      type: exercises.type,
+      repCount: exercises.repCount,
+      formScore: exercises.formScore,
+      runTime: exercises.runTime,
+      completedAt: exercises.completedAt,
+      points: exercises.points,
+      username: users.username,
+    })
+    .from(exercises)
+    .innerJoin(users, eq(exercises.userId, users.id))
+    .where(
+      and(
+        eq(exercises.type, type),
+        eq(exercises.status, 'completed'),
+        isNotNull(exercises.points)
+      )
+    )
+    .orderBy(desc(exercises.points))
+    .limit(limit || 10);
+    
+    // Store in cache for next time
+    await cache.set(cacheKey, result);
+    
+    return result;
   }
   
-  async getOverallLeaderboard(limit: number = 10): Promise<{ userId: number, username: string, totalPoints: number }[]> {
-    try {
-      // First check if there are any completed exercises
-      const exerciseCount = await db.select({ count: count() })
-        .from(exercises)
-        .where(eq(exercises.status, 'completed'));
-      
-      // If no completed exercises, return empty array
-      if (exerciseCount[0].count === 0) {
-        return [];
-      }
-      
-      const result = await db.select({
-        userId: exercises.userId,
-        totalPoints: sql<number>`COALESCE(sum(${exercises.points}), 0)`,
-      })
-      .from(exercises)
-      .where(eq(exercises.status, 'completed'))
-      .groupBy(exercises.userId)
-      .orderBy(desc(sql<number>`COALESCE(sum(${exercises.points}), 0)`))
-      .limit(limit);
-      
-      // If no results, return empty array
-      if (result.length === 0) {
-        return [];
-      }
-      
-      // Get usernames for the results
-      const userIds = result.map(r => r.userId).filter(id => id !== null && id !== undefined);
-      
-      // If no valid userIds, return empty array
-      if (userIds.length === 0) {
-        return [];
-      }
-      
-      // Get user records with individual queries to avoid SQL IN clause issues
-      const userPromises = userIds.map(id => 
-        db.select().from(users).where(eq(users.id, id)).then(results => results[0])
-      );
-      const userRecords = await Promise.all(userPromises);
-      
-      // Create a map of userId to username
-      const usernameMap = Object.fromEntries(
-        userRecords.filter(Boolean).map(user => [user.id, user.username])
-      );
-      
-      // Add username to each result
-      return result.map(r => ({
-        userId: r.userId,
-        username: usernameMap[r.userId] || 'Unknown User',
-        totalPoints: r.totalPoints || 0
-      }));
-    } catch (error) {
-      console.error('Error in getOverallLeaderboard:', error);
-      // Return empty array on error
-      return [];
+  async getOverallLeaderboard(limit?: number): Promise<{ userId: number, username: string, totalPoints: number }[]> {
+    const cacheKey = `leaderboard:overall:${limit || 10}`;
+    
+    // Try to get from cache first
+    const cachedResult = await cache.get<{ userId: number, username: string, totalPoints: number }[]>(cacheKey);
+    if (cachedResult) {
+      console.log(`Cache hit for ${cacheKey}`);
+      return cachedResult;
     }
+    
+    // If not in cache, query the database
+    console.log(`Cache miss for ${cacheKey}, querying database`);
+    
+    const result = await db.select({
+      userId: exercises.userId,
+      username: users.username,
+      totalPoints: sql<number>`sum(${exercises.points})::integer`,
+    })
+    .from(exercises)
+    .innerJoin(users, eq(exercises.userId, users.id))
+    .where(
+      and(
+        eq(exercises.status, 'completed'),
+        isNotNull(exercises.points)
+      )
+    )
+    .groupBy(exercises.userId, users.username)
+    .orderBy(desc(sql`sum(${exercises.points})`))
+    .limit(limit || 10);
+    
+    // Store in cache for next time
+    await cache.set(cacheKey, result);
+    
+    return result;
   }
   
   async getUserHistory(userId: number, type: ExerciseType, limit: number = 10): Promise<Exercise[]> {
@@ -619,6 +614,45 @@ export class DatabaseStorage implements IStorage {
       console.error('Error in getLocalOverallLeaderboard:', error);
       return [];
     }
+  }
+
+  // Then add a method to invalidate leaderboard caches when new exercise data is added
+  async invalidateLeaderboardCaches(): Promise<void> {
+    // Invalidate all leaderboard caches
+    await cache.delByPattern('leaderboard:*');
+  }
+
+  // Get exercise by ID
+  async getExerciseById(id: number): Promise<Exercise | undefined> {
+    const result = await db.select().from(exercises).where(eq(exercises.id, id)).limit(1);
+    return result[0];
+  }
+
+  // Update exercise
+  async updateExercise(id: number, data: Partial<Omit<Exercise, 'id'>>): Promise<Exercise | undefined> {
+    const results = await db.update(exercises)
+      .set(data)
+      .where(eq(exercises.id, id))
+      .returning();
+    
+    await this.invalidateLeaderboardCaches();
+    
+    return results[0];
+  }
+
+  // Run data methods
+  async createRunData(data: typeof insertRunDataSchema._type): Promise<any> {
+    const results = await db.insert(runData).values(data).returning();
+    return results[0];
+  }
+
+  async getRunDataByExerciseId(exerciseId: number): Promise<any | undefined> {
+    const result = await db.select()
+      .from(runData)
+      .where(eq(runData.exerciseId, exerciseId))
+      .limit(1);
+    
+    return result[0];
   }
 }
 

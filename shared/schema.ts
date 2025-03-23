@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, real, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, real, index, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -35,20 +35,15 @@ export const exercises = pgTable(
     runTime: integer("run_time"),
     completedAt: timestamp("completed_at"),
     points: integer("points"),
-    // Add created_at for proper time-series data management
+    verified: boolean("verified").default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => {
     return {
-      // Index for querying user's exercises (most common query)
       userIdIdx: index("user_id_idx").on(table.userId),
-      // Composite index for filtering by user and exercise type
       userTypeIdx: index("user_type_idx").on(table.userId, table.type),
-      // Index for filtering by exercise type (for leaderboards)
       typeIdx: index("type_idx").on(table.type),
-      // Index for time-based queries
       completedAtIdx: index("completed_at_idx").on(table.completedAt),
-      // Composite index for leaderboard queries (by type and points)
       leaderboardIdx: index("leaderboard_idx").on(table.type, table.points),
     };
   }
@@ -76,9 +71,7 @@ export const formIssues = pgTable(
   },
   (table) => {
     return {
-      // Index for querying form issues by exercise
       exerciseIdIdx: index("form_issues_exercise_id_idx").on(table.exerciseId),
-      // Index for time-based queries
       timestampIdx: index("form_issues_timestamp_idx").on(table.timestamp),
     };
   }
@@ -102,6 +95,47 @@ export const insertKeyPointsSchema = createInsertSchema(keyPoints).pick({
   exerciseId: true,
   timestamp: true,
   data: true,
+});
+
+export const runData = pgTable(
+  "run_data",
+  {
+    id: serial("id").primaryKey(),
+    exerciseId: integer("exercise_id").notNull().references(() => exercises.id),
+    deviceType: text("device_type").notNull(),
+    deviceName: text("device_name").notNull(),
+    startTime: timestamp("start_time").notNull(),
+    endTime: timestamp("end_time").notNull(),
+    totalDistance: numeric("total_distance").notNull(),
+    avgPace: integer("avg_pace").notNull(),
+    avgHeartRate: integer("avg_heart_rate"),
+    maxHeartRate: integer("max_heart_rate"),
+    calories: integer("calories"),
+    elevationGain: integer("elevation_gain"),
+    gpsData: text("gps_data"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => {
+    return {
+      exerciseIdIdx: index("run_data_exercise_id_idx").on(table.exerciseId),
+      startTimeIdx: index("run_data_start_time_idx").on(table.startTime),
+    };
+  }
+);
+
+export const insertRunDataSchema = createInsertSchema(runData).pick({
+  exerciseId: true,
+  deviceType: true,
+  deviceName: true,
+  startTime: true,
+  endTime: true,
+  totalDistance: true,
+  avgPace: true,
+  avgHeartRate: true,
+  maxHeartRate: true,
+  calories: true,
+  elevationGain: true,
+  gpsData: true,
 });
 
 export type User = typeof users.$inferSelect;

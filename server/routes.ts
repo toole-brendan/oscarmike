@@ -4,6 +4,9 @@ import { storage, type PaginationParams } from "./storage";
 import { ExerciseType, insertExerciseSchema, insertFormIssueSchema, insertKeyPointsSchema, insertUserSchema } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
+import { comparePassword, generateToken, hashPassword } from "./auth";
+import { authenticateJWT, requireAuth } from "./middleware";
+import { authRateLimit, defaultRateLimit, heavyOperationRateLimit } from "./ratelimit";
 
 // Login schema for validating login requests
 const loginSchema = z.object({
@@ -32,19 +35,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // prefix all routes with /api
   const api = "/api";
   
-  // Login route
-  app.post(`${api}/login`, async (req: Request, res: Response) => {
+  // Add rate limiting to all API routes
+  app.use(`${api}`, defaultRateLimit);
+  
+  // Add JWT authentication middleware to all routes
+  app.use(`${api}`, authenticateJWT);
+  
+  // Login route with stricter rate limiting
+  app.post(`${api}/login`, authRateLimit, async (req: Request, res: Response) => {
     try {
       const loginData = loginSchema.parse(req.body);
       const user = await storage.getUserByUsername(loginData.username);
       
-      if (!user || user.password !== loginData.password) {
+      if (!user) {
         return res.status(401).json({ message: "Invalid username or password" });
       }
       
-      // Return user data (except password) for the client
+      // Compare password with hash
+      const isValidPassword = await comparePassword(loginData.password, user.password);
+      
+      if (!isValidPassword) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+      
+      // Generate JWT token
+      const token = generateToken({ id: user.id, username: user.username });
+      
+      // Return user data and token
       const { password, ...userData } = user;
-      return res.status(200).json(userData);
+      return res.status(200).json({ 
+        user: userData,
+        token 
+      });
     } catch (error) {
       console.error('Error during login:', error);
       
@@ -55,8 +77,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // User routes
-  app.post(`${api}/users`, async (req: Request, res: Response) => {
+  // User creation with stricter rate limiting
+  app.post(`${api}/users`, authRateLimit, async (req: Request, res: Response) => {
     try {
       const userData = insertUserSchema.parse(req.body);
       const existingUser = await storage.getUserByUsername(userData.username);
@@ -65,19 +87,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(409).json({ message: "Username already exists" });
       }
       
-      const user = await storage.createUser(userData);
-      return res.status(201).json(user);
+      // Hash the password before storing
+      const hashedPassword = await hashPassword(userData.password);
+      
+      // Create user with hashed password
+      const user = await storage.createUser({
+        ...userData,
+        password: hashedPassword
+      });
+      
+      // Generate JWT token
+      const token = generateToken({ id: user.id, username: user.username });
+      
+      // Return user data (except password) and token
+      const { password, ...userResponse } = user;
+      return res.status(201).json({
+        user: userResponse,
+        token
+      });
     } catch (error) {
       console.error('Error creating user:', error);
       
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: fromZodError(error).message });
       }
-      return res.status(500).json({ message: "Internal server error" });
+      
+      // Provide more detailed error information
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return res.status(500).json({ 
+        message: "Internal server error", 
+        details: errorMessage,
+        stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
+      });
     }
   });
 
-  app.get(`${api}/users`, async (req: Request, res: Response) => {
+  // Protected routes
+  app.get(`${api}/users`, requireAuth, async (req: Request, res: Response) => {
     try {
       const paginationParams = getPaginationParams(req);
       const users = await storage.getUsers(paginationParams);
@@ -88,7 +134,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get(`${api}/users/:id`, async (req: Request, res: Response) => {
+  app.get(`${api}/users/:id`, requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       
@@ -268,7 +314,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Leaderboard routes
-  app.get(`${api}/leaderboard/:type`, async (req: Request, res: Response) => {
+  app.get(`${api}/leaderboard/:type`, heavyOperationRateLimit, async (req: Request, res: Response) => {
     try {
       const type = req.params.type as ExerciseType;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
@@ -289,7 +335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get(`${api}/leaderboard`, async (req: Request, res: Response) => {
+  app.get(`${api}/leaderboard`, heavyOperationRateLimit, async (req: Request, res: Response) => {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
       
@@ -306,7 +352,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Local leaderboard routes
-  app.get(`${api}/local-leaderboard/:type`, async (req: Request, res: Response) => {
+  app.get(`${api}/local-leaderboard/:type`, heavyOperationRateLimit, async (req: Request, res: Response) => {
     try {
       const type = req.params.type as ExerciseType;
       const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
@@ -337,7 +383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get(`${api}/local-leaderboard`, async (req: Request, res: Response) => {
+  app.get(`${api}/local-leaderboard`, heavyOperationRateLimit, async (req: Request, res: Response) => {
     try {
       const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
       const radius = req.query.radius ? parseFloat(req.query.radius as string) : 5; // Default 5 miles

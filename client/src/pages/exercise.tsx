@@ -128,7 +128,7 @@ const Exercise: React.FC = () => {
         repCount: exerciseType !== 'run' ? repCount : null,
         formScore: Math.round(formScore),
         runTime: exerciseType === 'run' ? timeRemaining : null,
-        completedAt: new Date().toISOString(),  // ISO string format
+        completedAt: new Date(), // Use Date object directly instead of ISO string
         points: calculatePoints(),
       };
       
