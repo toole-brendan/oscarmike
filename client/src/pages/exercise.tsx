@@ -121,20 +121,24 @@ const Exercise: React.FC = () => {
       const exerciseData = {
         userId: 1, // Hardcoded for demo
         type: exerciseType,
-        status: 'completed',
-        repCount,
+        status: 'completed' as const,
+        repCount: exerciseType !== 'run' ? repCount : null,
         formScore: Math.round(formScore),
+        runTime: exerciseType === 'run' ? timeRemaining : null,
         completedAt: new Date().toISOString(),
         points: calculatePoints(),
       };
       
+      console.log('Saving exercise data:', exerciseData);
       return apiRequest('POST', '/api/exercises', exerciseData);
     },
     onSuccess: async (response) => {
       const data = await response.json();
+      console.log('Exercise saved successfully:', data);
       navigate(`/results/${data.id}`);
     },
     onError: (error) => {
+      console.error('Error saving exercise:', error);
       toast({
         title: 'Error saving results',
         description: error.message,

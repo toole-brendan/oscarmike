@@ -1,4 +1,5 @@
 import * as poseDetection from '@tensorflow-models/pose-detection';
+import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-webgl';
 
 // Define the keypoints we care about for exercise form detection

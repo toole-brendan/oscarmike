@@ -87,14 +87,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post(`${api}/exercises`, async (req: Request, res: Response) => {
     try {
+      console.log("Creating exercise with data:", JSON.stringify(req.body));
       const exerciseData = insertExerciseSchema.parse(req.body);
       const exercise = await storage.createExercise(exerciseData);
       return res.status(201).json(exercise);
     } catch (error) {
       if (error instanceof z.ZodError) {
+        console.error("Validation error:", error.format());
         return res.status(400).json({ message: fromZodError(error).message });
       }
-      return res.status(500).json({ message: "Internal server error" });
+      console.error("Error creating exercise:", error);
+      return res.status(500).json({ message: "Internal server error", error: (error as Error).message });
     }
   });
 

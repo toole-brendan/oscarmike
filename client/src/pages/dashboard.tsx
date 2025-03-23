@@ -27,10 +27,16 @@ const Dashboard: React.FC = () => {
         const defaultExercises: Partial<Exercise>[] = [];
         
         for (const type of exerciseTypes) {
+          // Ensure we provide all required fields for a new exercise
           defaultExercises.push({
             userId,
             type,
             status: 'not_started',
+            repCount: null,
+            formScore: null,
+            runTime: null,
+            completedAt: null,
+            points: null,
           });
         }
         
@@ -62,7 +68,7 @@ const Dashboard: React.FC = () => {
   const getLatestExerciseByType = (type: ExerciseType): Exercise | undefined => {
     if (!exercises) return undefined;
     
-    const typeExercises = exercises.filter(e => e.type === type);
+    const typeExercises = exercises.filter((e: Exercise) => e.type === type);
     return typeExercises.length > 0 ? typeExercises[0] : undefined;
   };
   
@@ -70,8 +76,8 @@ const Dashboard: React.FC = () => {
   const calculateOverallScore = (): { score: number, max: number } => {
     if (!exercises) return { score: 0, max: 0 };
     
-    const completedExercises = exercises.filter(e => e.status === 'completed');
-    const totalPoints = completedExercises.reduce((sum, e) => sum + (e.points || 0), 0);
+    const completedExercises = exercises.filter((e: Exercise) => e.status === 'completed');
+    const totalPoints = completedExercises.reduce((sum: number, e: Exercise) => sum + (e.points || 0), 0);
     
     return { score: totalPoints, max: 300 };
   };
