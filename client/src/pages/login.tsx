@@ -76,9 +76,9 @@ const Login: React.FC = () => {
     <div className="flex justify-center items-center min-h-screen bg-slate-50">
       <Card className="w-full max-w-md p-8 shadow-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold">Welcome Back</h1>
+          <h1 className="text-2xl font-bold">Welcome to OMPT</h1>
           <p className="text-gray-600 mt-2">
-            Log in to continue tracking your workout progress
+            Log in to continue tracking your workout progress with On the Move Physical Training
           </p>
         </div>
         

@@ -79,9 +79,9 @@ const Register: React.FC = () => {
     <div className="flex justify-center items-center min-h-screen bg-slate-50">
       <Card className="w-full max-w-md p-8 shadow-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold">Create Account</h1>
+          <h1 className="text-2xl font-bold">Create OMPT Account</h1>
           <p className="text-gray-600 mt-2">
-            Register to track your workout progress
+            Register to track your workout progress with On the Move Physical Training
           </p>
         </div>
         
