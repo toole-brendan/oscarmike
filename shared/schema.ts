@@ -151,22 +151,22 @@ export const exerciseInfo = {
   pushups: {
     title: "Push-ups",
     description: "Max reps in 2 minutes",
-    image: "https://images.unsplash.com/photo-1616803689943-5601631c7fec?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80"
+    image: "/images/push_up.png"
   },
   pullups: {
     title: "Pull-ups",
     description: "Max reps in 2 minutes",
-    image: "https://images.unsplash.com/photo-1598266663439-2056e6900346?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80"
+    image: "/images/Pull_up.png"
   },
   situps: {
     title: "Sit-ups",
     description: "Max reps in 2 minutes",
-    image: "https://images.unsplash.com/photo-1600881333168-2ef49b341f30?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80"
+    image: "/images/sit_up.png"
   },
   run: {
     title: "2-Mile Run",
     description: "Best completion time",
-    image: "https://images.unsplash.com/photo-1486218119243-13883505764c?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80"
+    image: "/images/running.png"
   }
 };
 

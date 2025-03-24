@@ -58,9 +58,9 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
       className={`exercise-card overflow-hidden transition duration-200 cursor-pointer hover:shadow-lg hover:-translate-y-1 ${className}`}
       onClick={handleClick}
     >
-      <div className="relative h-40 bg-gray-100">
+      <div className="relative h-40 bg-neutral-50">
         <img 
-          className="w-full h-full object-cover" 
+          className="w-full h-full object-contain" 
           src={info.image} 
           alt={`${info.title} exercise`} 
         />
