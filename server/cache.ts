@@ -7,6 +7,8 @@ dotenv.config();
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 // Cache TTL in seconds (default: 5 minutes)
 const DEFAULT_CACHE_TTL = parseInt(process.env.CACHE_TTL || '300');
+// Detect if using AWS ElastiCache
+const isAwsElastiCache = REDIS_URL.includes('.cache.amazonaws.com');
 
 class RedisCache {
   private client: RedisClientType | null = null;
@@ -26,9 +28,28 @@ class RedisCache {
         return;
       }
 
-      this.client = createClient({
-        url: REDIS_URL
-      });
+      // Configure Redis client with optimal settings for AWS ElastiCache
+      const clientOptions: any = {
+        url: REDIS_URL,
+        socket: {
+          reconnectStrategy: (retries: number) => {
+            // Exponential backoff with a maximum delay of 10 seconds
+            const delay = Math.min(1000 * Math.pow(2, retries), 10000);
+            return delay;
+          }
+        }
+      };
+
+      // Add specific settings for AWS ElastiCache if detected
+      if (isAwsElastiCache) {
+        console.log('AWS ElastiCache detected, applying optimized connection settings');
+        // ElastiCache requires TLS
+        clientOptions.socket.tls = true;
+        // Increase connection timeout for cloud environments
+        clientOptions.socket.connectTimeout = 5000;
+      }
+
+      this.client = createClient(clientOptions);
 
       this.client.on('error', (err) => {
         console.error('Redis error:', err);
@@ -36,7 +57,7 @@ class RedisCache {
       });
 
       this.client.on('connect', () => {
-        console.log('Connected to Redis');
+        console.log(`Connected to Redis${isAwsElastiCache ? ' (AWS ElastiCache)' : ''}`);
         this.isConnected = true;
       });
 

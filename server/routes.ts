@@ -158,14 +158,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(`${api}/users/:userId/exercises`, async (req: Request, res: Response) => {
     try {
       const userId = parseInt(req.params.userId);
+      console.log(`Fetching exercises for user ID: ${userId}`);
       
       if (isNaN(userId)) {
         return res.status(400).json({ message: "Invalid user ID" });
       }
       
       const paginationParams = getPaginationParams(req);
-      const exercises = await storage.getExercises(userId, paginationParams);
-      return res.json(exercises);
+      console.log(`Pagination params:`, paginationParams);
+      
+      try {
+        const exercises = await storage.getExercises(userId, paginationParams);
+        console.log(`Retrieved ${exercises?.data?.length || 0} exercises`);
+        return res.json(exercises);
+      } catch (storageError) {
+        console.error('Storage error getting exercises:', storageError);
+        return res.status(500).json({ message: "Database error retrieving exercises" });
+      }
     } catch (error) {
       console.error('Error getting exercises:', error);
       return res.status(500).json({ message: "Internal server error" });

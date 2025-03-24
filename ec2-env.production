@@ -1,0 +1,17 @@
+NODE_ENV=production
+NODE_TLS_REJECT_UNAUTHORIZED=0
+
+# AWS RDS PostgreSQL Connection
+DATABASE_URL=postgres://postgres:Dunlainge1!@ptchampion-1-instance-1.ck9iecaw2h6w.us-east-1.rds.amazonaws.com:5432/postgres
+
+# JWT configuration
+JWT_SECRET=use-a-secure-random-string-in-production
+JWT_EXPIRES_IN=24h
+
+# Redis configuration for caching
+REDIS_URL=redis://localhost:6379
+CACHE_TTL=300 # 5 minutes in seconds
+DISABLE_CACHE=true
+
+# Server port configuration
+PORT=3000 

@@ -26,6 +26,7 @@ const Header: React.FC = () => {
   
   const handleLogout = () => {
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
     setIsLoggedIn(false);
     setUserData(null);
     

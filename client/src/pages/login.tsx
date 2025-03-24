@@ -50,7 +50,9 @@ const Login: React.FC = () => {
     },
     onSuccess: (data) => {
       // Store user data in localStorage
-      localStorage.setItem('user', JSON.stringify(data));
+      localStorage.setItem('user', JSON.stringify(data.user));
+      // Store token separately for API calls
+      localStorage.setItem('token', data.token);
       
       toast({
         title: 'Login successful',

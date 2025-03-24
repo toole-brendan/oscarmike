@@ -1,17 +1,17 @@
-# OMPT: AI-Powered Fitness Evaluation
+# PT Champion: AI-Powered Fitness Evaluation
 
 A computer vision-powered application that grades bodyweight exercises and running performance for physical fitness tests.
 
 ## Overview
 
-OMPT is a comprehensive fitness evaluation tool that uses artificial intelligence and computer vision to assess and grade physical fitness exercises with precision. The application focuses on four key exercises commonly found in military and fitness tests:
+PT Champion is a comprehensive fitness evaluation tool that uses artificial intelligence and computer vision to assess and grade physical fitness exercises with precision. The application focuses on four key exercises commonly found in military and fitness tests:
 
 - Push-ups
 - Pull-ups  
 - Sit-ups
 - 2-mile run
 
-Unlike traditional fitness tests that rely on human judgment, OMPT leverages advanced pose detection technology to ensure consistent and objective evaluation of exercise form and performance.
+Unlike traditional fitness tests that rely on human judgment, PT Champion leverages advanced pose detection technology to ensure consistent and objective evaluation of exercise form and performance.
 
 ## Features
 
@@ -265,8 +265,8 @@ The application uses Web Bluetooth API and vendor-specific API integrations to c
 
 1. Clone the repository
 ```
-git clone https://github.com/yourusername/ompt.git
-cd ompt
+git clone https://github.com/yourusername/pt-champion.git
+cd pt-champion
 ```
 
 2. Install dependencies
@@ -323,12 +323,12 @@ npm run start
 
 1. Build the Docker image
 ```
-docker build -t ompt:latest .
+docker build -t pt-champion:latest .
 ```
 
 2. Run the container
 ```
-docker run -p 5000:5000 --env-file .env.production ompt:latest
+docker run -p 5000:5000 --env-file .env.production pt-champion:latest
 ```
 
 ## Usage Guide
@@ -507,7 +507,7 @@ This will:
 
 ## Contributing
 
-We welcome contributions to the OMPT project! To contribute:
+We welcome contributions to the PT Champion project! To contribute:
 
 1. Fork the repository
 2. Create a feature branch

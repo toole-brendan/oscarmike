@@ -18,27 +18,46 @@ if (fs.existsSync(envPath)) {
 // Print DATABASE_URL for debugging (don't include in production)
 const dbUrlExists = !!process.env.DATABASE_URL;
 console.log(`DATABASE_URL ${dbUrlExists ? 'exists' : 'does not exist'}`);
-if (dbUrlExists) {
+if (dbUrlExists && process.env.NODE_ENV !== 'production') {
   // Don't log the actual URL for security reasons
-  console.log(`DATABASE_URL starts with: ${process.env.DATABASE_URL.substring(0, 15)}...`);
+  console.log(`DATABASE_URL starts with: ${process.env.DATABASE_URL!.substring(0, 15)}...`);
 }
 
-// Connection pool configuration for better scalability
+// Connection pool configuration for AWS RDS PostgreSQL
 const connectionOptions = {
   max: 25, // Increased from 10 to 25 for better scaling
   idle_timeout: 30, // Max seconds a connection can be idle before being removed
   connect_timeout: 15, // Max seconds to wait for a connection
-  prepare: false, // For better performance with Neon serverless
-  // Disable SSL for local development
-  ssl: process.env.NODE_ENV === 'production', // Enable SSL in production
+  prepare: false, // For better performance
+  max_retries: 5, // Max retries for failed connections
+  retry_interval: 1000, // Milliseconds between retries
+  
+  // AWS RDS requires SSL in most configurations
+  ssl: process.env.NODE_ENV === 'production' || 
+       (process.env.DATABASE_URL ? process.env.DATABASE_URL.includes('.rds.amazonaws.com') : false)
+         ? { rejectUnauthorized: false } // Allow self-signed certificates
+         : false,
+  
   onnotice: () => {}, // Silence notices for cleaner logs
 };
 
 // Development mode with mock database
 const isDev = process.env.NODE_ENV !== 'production';
 
+// Define a proper type for the in-memory store
+type InMemoryStore = {
+  users: any[];
+  exercises: any[];
+  formIssues: any[];
+  keyPoints: any[];
+  userIdCounter: number;
+  exerciseIdCounter: number;
+  formIssueIdCounter: number;
+  keyPointsIdCounter: number;
+};
+
 // In-memory store for development
-const inMemoryStore = {
+const inMemoryStore: InMemoryStore = {
   users: [] as any[],
   exercises: [] as any[],
   formIssues: [] as any[],
@@ -51,10 +70,23 @@ const inMemoryStore = {
 
 let db: any;
 
+// Function to ensure array type for in-memory store
+const getStoreArray = (storeName: keyof InMemoryStore): any[] => {
+  // Only return the array properties, not the counter properties
+  const store = inMemoryStore[storeName];
+  return Array.isArray(store) ? store : [];
+};
+
 try {
   // Use environment variable for database connection with connection pooling
   if (process.env.DATABASE_URL) {
     console.log('Attempting to connect to PostgreSQL database...');
+    // Check if it's an AWS RDS URL
+    const isAwsRds = process.env.DATABASE_URL.includes('.rds.amazonaws.com');
+    if (isAwsRds) {
+      console.log('Detected AWS RDS PostgreSQL connection');
+    }
+    
     const client = postgres(process.env.DATABASE_URL, connectionOptions);
     db = drizzle(client, { schema });
     console.log('Connected to PostgreSQL database');
@@ -72,13 +104,14 @@ try {
               if (condition && condition.value && condition.column) {
                 const column = condition.column.name;
                 const value = condition.value;
-                return inMemoryStore[storeName as keyof typeof inMemoryStore].filter((item: any) => item[column] === value);
+                const storeArray = getStoreArray(storeName as keyof InMemoryStore);
+                return storeArray.filter((item: any) => item[column] === value);
               }
-              return inMemoryStore[storeName as keyof typeof inMemoryStore];
+              return getStoreArray(storeName as keyof InMemoryStore);
             },
-            orderBy: () => inMemoryStore[storeName as keyof typeof inMemoryStore],
+            orderBy: () => getStoreArray(storeName as keyof InMemoryStore),
             limit: () => ({
-              offset: () => inMemoryStore[storeName as keyof typeof inMemoryStore]
+              offset: () => getStoreArray(storeName as keyof InMemoryStore)
             })
           };
         }
@@ -87,7 +120,7 @@ try {
         values: (data: any) => ({
           returning: () => {
             const storeName = table.name || 'users';
-            const idCounter = `${storeName}IdCounter` as keyof typeof inMemoryStore;
+            const idCounter = `${storeName}IdCounter` as keyof InMemoryStore;
             
             // Clone the data and add an ID
             const newItem = { ...data, id: inMemoryStore[idCounter] };
@@ -98,7 +131,10 @@ try {
             }
             
             // Add to store and increment counter
-            inMemoryStore[storeName as keyof typeof inMemoryStore].push(newItem);
+            const storeArrayName = storeName as keyof InMemoryStore;
+            if (Array.isArray(inMemoryStore[storeArrayName])) {
+              (inMemoryStore[storeArrayName] as any[]).push(newItem);
+            }
             inMemoryStore[idCounter] = (inMemoryStore[idCounter] as number) + 1;
             
             return [newItem];
@@ -113,7 +149,7 @@ try {
               if (condition && condition.value && condition.column) {
                 const column = condition.column.name;
                 const value = condition.value;
-                const storeArray = inMemoryStore[storeName as keyof typeof inMemoryStore] as any[];
+                const storeArray = getStoreArray(storeName as keyof InMemoryStore);
                 const index = storeArray.findIndex((item: any) => item[column] === value);
                 
                 if (index !== -1) {
@@ -133,7 +169,7 @@ try {
             if (condition && condition.value && condition.column) {
               const column = condition.column.name;
               const value = condition.value;
-              const storeArray = inMemoryStore[storeName as keyof typeof inMemoryStore] as any[];
+              const storeArray = getStoreArray(storeName as keyof InMemoryStore);
               const index = storeArray.findIndex((item: any) => item[column] === value);
               
               if (index !== -1) {
@@ -168,13 +204,14 @@ try {
               if (condition && condition.value && condition.column) {
                 const column = condition.column.name;
                 const value = condition.value;
-                return inMemoryStore[storeName as keyof typeof inMemoryStore].filter((item: any) => item[column] === value);
+                const storeArray = getStoreArray(storeName as keyof InMemoryStore);
+                return storeArray.filter((item: any) => item[column] === value);
               }
-              return inMemoryStore[storeName as keyof typeof inMemoryStore];
+              return getStoreArray(storeName as keyof InMemoryStore);
             },
-            orderBy: () => inMemoryStore[storeName as keyof typeof inMemoryStore],
+            orderBy: () => getStoreArray(storeName as keyof InMemoryStore),
             limit: () => ({
-              offset: () => inMemoryStore[storeName as keyof typeof inMemoryStore]
+              offset: () => getStoreArray(storeName as keyof InMemoryStore)
             })
           };
         }
@@ -183,9 +220,10 @@ try {
         values: (data: any) => ({
           returning: () => {
             const storeName = table.name || 'users';
-            const idCounter = `${storeName}IdCounter` as keyof typeof inMemoryStore;
+            const idCounter = `${storeName}IdCounter` as keyof InMemoryStore;
             const newItem = { ...data, id: inMemoryStore[idCounter] };
-            inMemoryStore[storeName as keyof typeof inMemoryStore].push(newItem);
+            const storeArray = getStoreArray(storeName as keyof InMemoryStore);
+            storeArray.push(newItem);
             inMemoryStore[idCounter] = (inMemoryStore[idCounter] as number) + 1;
             return [newItem];
           }
@@ -199,7 +237,7 @@ try {
               if (condition && condition.value && condition.column) {
                 const column = condition.column.name;
                 const value = condition.value;
-                const storeArray = inMemoryStore[storeName as keyof typeof inMemoryStore] as any[];
+                const storeArray = getStoreArray(storeName as keyof InMemoryStore);
                 const index = storeArray.findIndex((item: any) => item[column] === value);
                 
                 if (index !== -1) {
@@ -219,7 +257,7 @@ try {
             if (condition && condition.value && condition.column) {
               const column = condition.column.name;
               const value = condition.value;
-              const storeArray = inMemoryStore[storeName as keyof typeof inMemoryStore] as any[];
+              const storeArray = getStoreArray(storeName as keyof InMemoryStore);
               const index = storeArray.findIndex((item: any) => item[column] === value);
               
               if (index !== -1) {

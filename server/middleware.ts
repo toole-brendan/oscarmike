@@ -39,13 +39,13 @@ export function httpLogging(req: Request, res: Response, next: NextFunction) {
   req.startTime = process.hrtime();
   
   // Log request information
-  httpLogger.http({
+  httpLogger.http(JSON.stringify({
     requestId: req.id,
     method: req.method,
     url: req.originalUrl || req.url,
     ip: req.ip,
     userAgent: req.headers['user-agent']
-  });
+  }));
   
   // Log response information when request is complete
   res.on('finish', () => {
@@ -53,13 +53,13 @@ export function httpLogging(req: Request, res: Response, next: NextFunction) {
     const hrTimeDiff = process.hrtime(req.startTime);
     const durationMs = hrTimeDiff[0] * 1000 + hrTimeDiff[1] / 1000000;
     
-    httpLogger.http({
+    httpLogger.http(JSON.stringify({
       requestId: req.id,
       method: req.method,
       url: req.originalUrl || req.url,
       statusCode: res.statusCode,
       durationMs: Math.round(durationMs)
-    });
+    }));
   });
   
   next();

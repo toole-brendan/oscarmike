@@ -1,0 +1,63 @@
+{
+  "Id": "E1FRFF3JQNGRE1",
+  "IfMatch": "E22JRKFI962P9U",
+  "DistributionConfig": {
+    "Origins": {
+      "Quantity": 2,
+      "Items": [
+        {
+          "Id": "ApiBackend",
+          "DomainName": "ec2-3-89-124-135.compute-1.amazonaws.com",
+          "OriginPath": "",
+          "CustomHeaders": {
+            "Quantity": 0
+          },
+          "CustomOriginConfig": {
+            "HTTPPort": 80,
+            "HTTPSPort": 443,
+            "OriginProtocolPolicy": "http-only",
+            "OriginSslProtocols": {
+              "Quantity": 1,
+              "Items": [
+                "TLSv1.2"
+              ]
+            },
+            "OriginReadTimeout": 30,
+            "OriginKeepaliveTimeout": 5
+          },
+          "ConnectionAttempts": 3,
+          "ConnectionTimeout": 10,
+          "OriginShield": {
+            "Enabled": false
+          }
+        },
+        {
+          "Id": "S3-ptchampion.ai",
+          "DomainName": "ptchampion.ai.s3-website-us-east-1.amazonaws.com",
+          "OriginPath": "",
+          "CustomHeaders": {
+            "Quantity": 0
+          },
+          "CustomOriginConfig": {
+            "HTTPPort": 80,
+            "HTTPSPort": 443,
+            "OriginProtocolPolicy": "http-only",
+            "OriginSslProtocols": {
+              "Quantity": 1,
+              "Items": [
+                "TLSv1.2"
+              ]
+            },
+            "OriginReadTimeout": 30,
+            "OriginKeepaliveTimeout": 5
+          },
+          "ConnectionAttempts": 3,
+          "ConnectionTimeout": 10,
+          "OriginShield": {
+            "Enabled": false
+          }
+        }
+      ]
+    }
+  }
+} 
