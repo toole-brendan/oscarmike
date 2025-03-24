@@ -79,7 +79,7 @@ const Register: React.FC = () => {
     <div className="flex justify-center items-center min-h-screen bg-slate-50">
       <Card className="w-full max-w-md p-8 shadow-md">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold tracking-widest">OMPT</h1>
+          <h1 className="text-4xl font-bold font-mono tracking-[0.25em]">PT CHAMPION</h1>
           <p className="text-xs text-gray-600 mt-0 font-medium tracking-tight">ON THE MOVE PHYSICAL TRAINING</p>
           <p className="text-gray-600 mt-5">
             Create an account to track your workout progress

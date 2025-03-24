@@ -46,7 +46,7 @@ const Header: React.FC = () => {
           onClick={() => navigate('/')}
         >
           <BarChart3 className="h-8 w-8 text-primary" />
-          <h1 className="ml-2 text-xl font-bold text-neutral-dark">OMPT</h1>
+          <h1 className="ml-2 text-xl font-bold font-mono tracking-[0.15em] text-neutral-dark">PT CHAMPION</h1>
         </div>
         
         <nav className="flex items-center space-x-4">
