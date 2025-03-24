@@ -77,7 +77,6 @@ const Login: React.FC = () => {
       <Card className="w-full max-w-md p-8 shadow-md">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold font-mono tracking-[0.25em]">PT CHAMPION</h1>
-          <p className="text-xs text-gray-600 mt-0 font-medium tracking-tight">ON THE MOVE PHYSICAL TRAINING</p>
           <p className="text-gray-600 mt-5">
             Log in to continue tracking your workout progress
           </p>
