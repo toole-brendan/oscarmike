@@ -29,13 +29,10 @@ async function ensureDevUserExists() {
       });
       log("Dev user created successfully");
     } else {
-      // If user exists but has the wrong password, update it
-      if (existingUser.password !== "password") {
-        await storage.updateUser(existingUser.id, { password: "password" });
-        log("Dev user password updated to 'password'");
-      } else {
-        log("Dev user already exists with correct password");
-      }
+      // Instead of comparing hashed password directly, hash the password and then update
+      const hashedPassword = await hashPassword("password");
+      await storage.updateUser(existingUser.id, { password: hashedPassword });
+      log("Dev user password updated to 'password'");
     }
   } catch (error) {
     console.error("Error creating Dev user:", error);
@@ -109,36 +106,40 @@ app.use((req, res, next) => {
 
     // Start the server on an available port
     const startServer = (port: number, maxRetries = 10, retryCount = 0) => {
-      server.listen(port, "localhost")
-        .on("error", (err: any) => {
-          if (err.code === "EADDRINUSE" && retryCount < maxRetries) {
-            log(`Port ${port} is in use, trying port ${port + 1}`);
-            // Port is in use, try the next one
-            startServer(port + 1, maxRetries, retryCount + 1);
-          } else {
-            console.error(`Error starting server: ${err.message}`);
-            process.exit(1);
+      const serverInstance = server.listen(port, "localhost");
+      
+      serverInstance.on("error", (err: any) => {
+        if (err.code === "EADDRINUSE" && retryCount < maxRetries) {
+          log(`Port ${port} is in use, trying port ${port + 1}`);
+          // Close this failed attempt before trying another port
+          serverInstance.close();
+          // Port is in use, try the next one
+          startServer(port + 1, maxRetries, retryCount + 1);
+        } else {
+          console.error(`Error starting server: ${err.message}`);
+          process.exit(1);
+        }
+      });
+      
+      serverInstance.on("listening", async () => {
+        log(`Server running at http://localhost:${port}`);
+        
+        // Create dev user once server is running
+        if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+          try {
+            // Wait a bit to ensure database connection is fully established
+            setTimeout(async () => {
+              try {
+                await ensureDevUserExists();
+              } catch (error) {
+                console.error("Error in delayed Dev user creation:", error);
+              }
+            }, 1000);
+          } catch (error) {
+            console.error("Error scheduling Dev user creation:", error);
           }
-        })
-        .on("listening", async () => {
-          log(`Server running at http://localhost:${port}`);
-          
-          // Create dev user once server is running
-          if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-            try {
-              // Wait a bit to ensure database connection is fully established
-              setTimeout(async () => {
-                try {
-                  await ensureDevUserExists();
-                } catch (error) {
-                  console.error("Error in delayed Dev user creation:", error);
-                }
-              }, 1000);
-            } catch (error) {
-              console.error("Error scheduling Dev user creation:", error);
-            }
-          }
-        });
+        }
+      });
     };
 
     // Start with port from env or default to 3000
