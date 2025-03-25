@@ -534,13 +534,126 @@ Please see CONTRIBUTING.md for detailed guidelines.
 - Personalized training recommendations
 - Advanced analytics dashboard
 
-## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Acknowledgments
+## Tree (most current state)
 
-- TensorFlow.js team for their pose detection models
-- The open-source community for their invaluable contributions
-- Shadcn UI for the component library
-- Military fitness standards documentation for scoring references
+brendantoole@Mac oscarmike % tree
+[1.8K]  .
+├── [ 448]  archived_scripts
+├── [ 256]  client
+│   ├── [  96]  public
+│   │   └── [ 192]  images
+│   ├── [ 288]  src
+│   │   ├── [3.3K]  App.tsx
+│   │   ├── [ 192]  components
+│   │   │   ├── [6.8K]  RunDataDisplay.tsx
+│   │   │   ├── [5.8K]  SmartWatchConnect.tsx
+│   │   │   ├── [ 128]  layout
+│   │   │   │   ├── [4.0K]  Header.tsx
+│   │   │   │   └── [1.6K]  MobileNav.tsx
+│   │   │   └── [1.7K]  ui
+│   │   │       ├── [1.9K]  accordion.tsx
+│   │   │       ├── [4.3K]  alert-dialog.tsx
+│   │   │       ├── [1.5K]  alert.tsx
+│   │   │       ├── [ 140]  aspect-ratio.tsx
+│   │   │       ├── [1.4K]  avatar.tsx
+│   │   │       ├── [1.1K]  badge.tsx
+│   │   │       ├── [2.6K]  breadcrumb.tsx
+│   │   │       ├── [1.9K]  button.tsx
+│   │   │       ├── [2.5K]  calendar.tsx
+│   │   │       ├── [1.8K]  card.tsx
+│   │   │       ├── [6.1K]  carousel.tsx
+│   │   │       ├── [ 10K]  chart.tsx
+│   │   │       ├── [1.0K]  checkbox.tsx
+│   │   │       ├── [1.6K]  circular-progress.tsx
+│   │   │       ├── [ 315]  collapsible.tsx
+│   │   │       ├── [4.8K]  command.tsx
+│   │   │       ├── [7.1K]  context-menu.tsx
+│   │   │       ├── [3.7K]  dialog.tsx
+│   │   │       ├── [2.9K]  drawer.tsx
+│   │   │       ├── [7.2K]  dropdown-menu.tsx
+│   │   │       ├── [2.3K]  exercise-card.tsx
+│   │   │       ├── [1.3K]  form-indicator.tsx
+│   │   │       ├── [4.0K]  form.tsx
+│   │   │       ├── [1.2K]  hover-card.tsx
+│   │   │       ├── [2.1K]  input-otp.tsx
+│   │   │       ├── [ 845]  input.tsx
+│   │   │       ├── [ 710]  label.tsx
+│   │   │       ├── [7.8K]  menubar.tsx
+│   │   │       ├── [4.9K]  navigation-menu.tsx
+│   │   │       ├── [2.7K]  pagination.tsx
+│   │   │       ├── [1.2K]  popover.tsx
+│   │   │       ├── [ 777]  progress.tsx
+│   │   │       ├── [1.4K]  radio-group.tsx
+│   │   │       ├── [1.7K]  resizable.tsx
+│   │   │       ├── [1.6K]  scroll-area.tsx
+│   │   │       ├── [5.5K]  select.tsx
+│   │   │       ├── [ 756]  separator.tsx
+│   │   │       ├── [4.2K]  sheet.tsx
+│   │   │       ├── [ 23K]  sidebar.tsx
+│   │   │       ├── [2.0K]  skeleton-overlay.tsx
+│   │   │       ├── [ 261]  skeleton.tsx
+│   │   │       ├── [1.1K]  slider.tsx
+│   │   │       ├── [1.1K]  switch.tsx
+│   │   │       ├── [2.7K]  table.tsx
+│   │   │       ├── [1.8K]  tabs.tsx
+│   │   │       ├── [ 772]  textarea.tsx
+│   │   │       ├── [4.7K]  toast.tsx
+│   │   │       ├── [ 772]  toaster.tsx
+│   │   │       ├── [1.7K]  toggle-group.tsx
+│   │   │       ├── [1.4K]  toggle.tsx
+│   │   │       ├── [1.1K]  tooltip.tsx
+│   │   │       └── [ 16K]  webcam.tsx
+│   │   ├── [ 128]  hooks
+│   │   │   ├── [ 565]  use-mobile.tsx
+│   │   │   └── [3.8K]  use-toast.ts
+│   │   ├── [ 224]  lib
+│   │   │   ├── [ 13K]  exercise-validation.ts
+│   │   │   ├── [ 10K]  pose-detection.ts
+│   │   │   ├── [2.4K]  queryClient.ts
+│   │   │   ├── [ 18K]  smartwatch-service.ts
+│   │   │   └── [ 166]  utils.ts
+│   │   ├── [ 157]  main.tsx
+│   │   └── [ 416]  pages
+│   │       ├── [9.1K]  dashboard.tsx
+│   │       ├── [ 10K]  exercise.tsx
+│   │       ├── [ 15K]  leaderboard.tsx
+│   │       ├── [4.1K]  login.tsx
+│   │       ├── [ 711]  not-found.tsx
+│   │       ├── [9.4K]  pullups.tsx
+│   │       ├── [9.4K]  pushups.tsx
+│   │       ├── [4.8K]  register.tsx
+│   │       ├── [8.5K]  results.tsx
+│   │       ├── [ 17K]  run.tsx
+│   │       └── [9.4K]  situps.tsx
+│   └── [ 656]  vite.config.ts
+├── [ 325]  drizzle.config.ts
+├── [ 224]  logs
+├── [1.6K]  migrate-aws.ts
+├── [1.0K]  migrate.ts
+├── [ 480]  server
+│   ├── [1.6K]  auth.ts
+│   ├── [4.5K]  cache.ts
+│   ├── [ 10K]  db.ts
+│   ├── [4.8K]  index.ts
+│   ├── [2.5K]  logger.ts
+│   ├── [  96]  middleware
+│   │   └── [1.6K]  auth.ts
+│   ├── [3.0K]  middleware.ts
+│   ├── [1.9K]  ratelimit.ts
+│   ├── [ 160]  routes
+│   │   ├── [ 418]  index.ts
+│   │   ├── [5.0K]  run-data.ts
+│   │   └── [3.5K]  smartwatch-api.ts
+│   ├── [ 18K]  routes.ts
+│   ├── [1.8K]  server.ts
+│   ├── [ 21K]  storage.ts
+│   └── [2.3K]  vite.ts
+├── [  96]  shared
+│   └── [5.2K]  schema.ts
+├── [2.9K]  tailwind.config.ts
+└── [1008]  vite.config.ts
+
+17 directories, 98 files
+brendantoole@Mac oscarmike % 
