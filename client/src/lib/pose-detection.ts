@@ -1,6 +1,8 @@
 import * as poseDetection from '@tensorflow-models/pose-detection';
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-webgl';
+// Explicitly import CPU backend as a fallback
+import '@tensorflow/tfjs-backend-cpu';
 
 // Define the keypoints we care about for exercise form detection
 export type KeyPoint = {
@@ -17,6 +19,7 @@ export type Pose = {
 
 let detector: poseDetection.PoseDetector | null = null;
 let isModelLoading = false;
+let lastBackendError: Error | null = null;
 
 // Initialize the pose detector
 export const initPoseDetector = async (): Promise<void> => {
@@ -36,84 +39,71 @@ export const initPoseDetector = async (): Promise<void> => {
     // Make sure TF backend is initialized
     console.log('Setting up TensorFlow backend...');
     
-    // Force WebGL backend for better performance
-    await tf.setBackend('webgl');
-    await tf.ready();
-    
-    // Print detailed backend info
-    console.log(`TensorFlow ready. Using backend: ${tf.getBackend()}`);
-    // Use optional chaining and type assertions to safely access backend properties
+    // First try WebGL backend for better performance
     try {
+      console.log('Attempting to use WebGL backend...');
+      await tf.setBackend('webgl');
+      await tf.ready();
+      console.log(`WebGL backend initialized: ${tf.getBackend()}`);
+      
+      // Print WebGL info
       const backend = tf.engine().backend as any;
       if (backend && backend.getMaxTextureSize) {
         console.log(`WebGL Max Texture Size: ${backend.getMaxTextureSize()}`);
       }
-      if (backend && backend.getGPGPUContext && backend.getGPGPUContext()) {
-        console.log(`WebGL Version: ${backend.getGPGPUContext().version}`);
+    } catch (webglError) {
+      console.warn('WebGL backend failed, falling back to CPU:', webglError);
+      lastBackendError = webglError as Error;
+      
+      // Fall back to CPU backend
+      try {
+        await tf.setBackend('cpu');
+        await tf.ready();
+        console.log(`CPU backend initialized: ${tf.getBackend()}`);
+      } catch (cpuError) {
+        console.error('CPU backend also failed:', cpuError);
+        throw new Error('Both WebGL and CPU backends failed to initialize');
       }
-    } catch (e) {
-      console.warn('Could not get detailed WebGL info:', e);
     }
-    
-    // Create detector using MoveNet - with detailed error reporting
-    console.log('Creating pose detector...');
-    const model = poseDetection.SupportedModels.MoveNet;
-    
-    // Configure model for better balance of performance and accuracy
-    const detectorConfig = {
-      modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
-      enableSmoothing: true,
-      minPoseScore: 0.2, // Lower threshold to detect poses more easily
-    };
-    
-    console.log('Creating pose detector with config:', detectorConfig);
     
     // Force release any potential previous models
-    tf.engine().startScope();
-    if (detector) {
-      try {
-        // Use type assertion to handle the dispose method
-        (detector as any).dispose?.();
-        console.log('Disposed previous detector');
-      } catch (e) {
-        console.warn('Error disposing previous detector:', e);
-      }
-    }
-    
-    // Create the detector
-    detector = await poseDetection.createDetector(model, detectorConfig);
-    tf.engine().endScope();
-    
-    console.log('Pose detector initialized successfully');
-    
-    // Pre-warm the model with a dummy tensor
     try {
-      console.log('Warming up pose detector...');
-      // Create a properly typed tensor for the model
-      const dummyImg = new ImageData(192, 192);
-      const dummyResult = await detector.estimatePoses(dummyImg, { flipHorizontal: false });
-      console.log('Warmup complete:', dummyResult);
-    } catch (warmupError) {
-      console.warn('Warmup error (non-critical):', warmupError);
+      tf.engine().startScope();
+      if (detector) {
+        try {
+          (detector as any).dispose?.();
+          console.log('Disposed previous detector');
+        } catch (e) {
+          console.warn('Error disposing previous detector:', e);
+        }
+      }
+    
+      // Create detector using MoveNet with reliable configuration
+      console.log('Creating pose detector...');
+      const model = poseDetection.SupportedModels.MoveNet;
+      
+      // Configure model for better compatibility - use lowest complexity model
+      const detectorConfig = {
+        modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+        enableSmoothing: true,
+        minPoseScore: 0.15, // Lower threshold for better detection
+      };
+      
+      console.log('Creating pose detector with config:', detectorConfig);
+      
+      // Create the detector
+      detector = await poseDetection.createDetector(model, detectorConfig);
+      console.log('Pose detector initialized successfully');
+      
+      tf.engine().endScope();
+    } catch (createError) {
+      console.error('Error creating detector:', createError);
+      tf.engine().endScope(); // Ensure we end scope even on error
+      throw createError;
     }
   } catch (error) {
     console.error('Failed to initialize pose detector:', error);
-    
-    // Try falling back to CPU if WebGL fails
-    if (tf.getBackend() === 'webgl') {
-      try {
-        console.log('Attempting to fall back to CPU backend...');
-        await tf.setBackend('cpu');
-        await tf.ready();
-        console.log('Successfully switched to CPU backend');
-        
-        // Don't try to create detector again here, let the next attempt handle it
-        detector = null;
-      } catch (fallbackError) {
-        console.error('Error during backend fallback:', fallbackError);
-      }
-    }
-    
+    detector = null;
     throw error;
   } finally {
     isModelLoading = false;
@@ -125,6 +115,49 @@ export const isDetectorReady = (): boolean => {
   return detector !== null;
 };
 
+// Get last backend error if any
+export const getLastBackendError = (): Error | null => {
+  return lastBackendError;
+};
+
+// Validate that the video is ready and has a valid stream
+const validateVideoStream = (video: HTMLVideoElement): boolean => {
+  if (!video) {
+    console.warn('Video element is null');
+    return false;
+  }
+  
+  if (video.readyState < 2) {
+    console.warn('Video not ready for pose detection, readyState:', video.readyState);
+    return false;
+  }
+  
+  if (!video.srcObject) {
+    console.warn('Video has no srcObject');
+    return false;
+  }
+  
+  const stream = video.srcObject as MediaStream;
+  const videoTracks = stream.getVideoTracks();
+  
+  if (videoTracks.length === 0) {
+    console.warn('Video stream has no video tracks');
+    return false;
+  }
+  
+  if (!videoTracks[0].enabled || videoTracks[0].muted) {
+    console.warn('Video track disabled or muted');
+    return false;
+  }
+  
+  if (video.videoWidth === 0 || video.videoHeight === 0) {
+    console.warn('Video dimensions are zero');
+    return false;
+  }
+  
+  return true;
+};
+
 // Detect poses in a video element
 export const detectPoses = async (
   video: HTMLVideoElement
@@ -134,13 +167,25 @@ export const detectPoses = async (
     return null;
   }
   
-  if (!video || video.readyState < 2) {
-    console.warn('Video not ready for pose detection');
+  // Validate the video stream more thoroughly
+  if (!validateVideoStream(video)) {
     return null;
   }
   
   try {
-    const poses = await detector.estimatePoses(video);
+    // Wrap the estimatePoses call in a timeout to prevent hanging
+    const posePromise = new Promise<poseDetection.Pose[]>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Pose detection timed out'));
+      }, 3000); // 3 second timeout
+      
+      detector!.estimatePoses(video).then((poses) => {
+        clearTimeout(timeoutId);
+        resolve(poses);
+      }).catch(reject);
+    });
+    
+    const poses = await posePromise;
     
     if (poses && poses.length > 0) {
       // Log first detection for debugging

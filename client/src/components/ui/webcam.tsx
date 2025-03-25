@@ -1,9 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { initPoseDetector, detectPoses, drawSkeleton } from '@/lib/pose-detection';
-import { Camera, RefreshCw, Bug } from 'lucide-react';
+import { Camera, RefreshCw, Calculator, ExternalLink, AlertTriangle, X, Check } from 'lucide-react';
 
 interface WebcamProps {
   onPoseDetected?: (pose: any) => void;
@@ -20,187 +19,118 @@ const Webcam: React.FC<WebcamProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isReady, setIsReady] = useState(false);
-  const [isCameraActive, setIsCameraActive] = useState(false);
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const [cameraState, setCameraState] = useState<'inactive' | 'requesting' | 'active' | 'error' | 'restricted'>('inactive');
+  const [isEmbedded, setIsEmbedded] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
-  const [detectedPose, setDetectedPose] = useState<boolean>(false);
-  const [debugMode, setDebugMode] = useState<boolean>(true);
+  const [detectedPose, setDetectedPose] = useState(false);
+  const [showManualMode, setShowManualMode] = useState(false);
   const detectionLoopRef = useRef<number | null>(null);
   const { toast } = useToast();
-  
-  // Initialize TensorFlow.js and pose detector
+
+  // Check if we're in an iframe (which often restricts camera access)
   useEffect(() => {
-    const init = async () => {
+    try {
+      setIsEmbedded(window.self !== window.top);
+    } catch (e) {
+      // If we can't access window.top due to security restrictions,
+      // we're definitely in an iframe with different origin
+      setIsEmbedded(true);
+    }
+  }, []);
+
+  // Initialize TensorFlow in background when component mounts
+  useEffect(() => {
+    const initTensorFlow = async () => {
       try {
         console.log("Initializing TensorFlow and pose detector...");
         await initPoseDetector();
-        setIsReady(true);
         console.log("TensorFlow and pose detector initialized successfully");
       } catch (error) {
-        toast({
-          title: 'Error initializing pose detector',
-          description: 'Please refresh the page and try again.',
-          variant: 'destructive',
-        });
         console.error('Error initializing pose detector:', error);
       }
     };
     
-    init();
-  }, [toast]);
-  
-  // Get available cameras
-  useEffect(() => {
-    const getDevices = async () => {
-      try {
-        // First request camera access to get permission
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-          .then((stream) => {
-            // Stop tracks immediately
-            stream.getTracks().forEach(track => track.stop());
-            
-            // Now enumerate devices
-            return navigator.mediaDevices.enumerateDevices();
-          })
-          .then((devices) => {
-            console.log("Available devices:", devices);
-            const videoDevices = devices.filter(device => device.kind === 'videoinput');
-            console.log("Available video devices:", videoDevices);
-            
-            setDevices(videoDevices);
-            
-            if (videoDevices.length > 0 && !selectedDeviceId) {
-              setSelectedDeviceId(videoDevices[0].deviceId);
-            }
-          });
-      } catch (error) {
-        console.error('Error getting media devices:', error);
-        toast({
-          title: 'Cannot access camera',
-          description: 'Please allow camera access in your browser settings.',
-          variant: 'destructive',
-        });
-      }
-    };
-    
-    getDevices();
-  }, []);
-  
-  // Start camera when ready
-  useEffect(() => {
-    if (isReady && selectedDeviceId && !isCameraActive) {
-      startCamera();
-    }
+    initTensorFlow();
     
     return () => {
+      // Clean up video on unmount
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
       }
       
       // Clean up detection loop
-      if (detectionLoopRef.current !== null) {
+      if (detectionLoopRef.current) {
         cancelAnimationFrame(detectionLoopRef.current);
-        detectionLoopRef.current = null;
       }
     };
-  }, [isReady, selectedDeviceId, isCameraActive]);
-  
-  // Start the webcam
-  const startCamera = async () => {
+  }, []);
+
+  // Simple function to enable camera
+  const enableCamera = async () => {
     if (!videoRef.current) return;
     
+    setCameraState('requesting');
+    
     try {
-      // First reset any existing stream
-      if (videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-        videoRef.current.srcObject = null;
-      }
-      
-      // Set up canvas first
-      if (canvasRef.current) {
-        canvasRef.current.width = width;
-        canvasRef.current.height = height;
-        console.log(`Canvas dimensions preset to: ${width}x${height}`);
-      }
-      
-      // Use device id if available
-      const constraints = {
-        audio: false,
-        video: selectedDeviceId 
-          ? { deviceId: { exact: selectedDeviceId } }
-          : { facingMode: 'environment', width: { ideal: width }, height: { ideal: height } }
-      };
-      
-      console.log("Attempting to access camera with constraints:", constraints);
-      
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log("Camera access granted:", stream);
-      
-      // Only after we have a stream, apply to video element
-      if (videoRef.current) {
-        // Prevent automatic size changes that could interrupt video
-        videoRef.current.width = width;
-        videoRef.current.height = height;
-        videoRef.current.srcObject = stream;
-        
-        // Play video with a handler for success
-        videoRef.current.onloadedmetadata = () => {
-          if (videoRef.current) {
-            videoRef.current.play()
-              .then(() => {
-                console.log("Video is now playing");
-                setIsCameraActive(true);
-                // Start pose detection loop
-                detectPoseLoop();
-              })
-              .catch((playError) => {
-                console.error("Error playing video:", playError);
-                toast({
-                  title: 'Error starting video',
-                  description: 'Could not play the camera stream. Please try again.',
-                  variant: 'destructive',
-                });
-              });
-          }
-        };
-      }
-    } catch (error) {
-      console.error('Error accessing camera:', error);
-      toast({
-        title: 'Camera access denied',
-        description: 'Please grant camera permission to use this feature.',
-        variant: 'destructive',
+      // Try with basic constraints first
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: true,
+        audio: false
       });
+      
+      if (!stream) {
+        throw new Error("No stream returned from getUserMedia");
+      }
+      
+      // Apply stream to video element
+      if (!videoRef.current) return;
+      
+      videoRef.current.srcObject = stream;
+      
+      // Use a safe pattern for event handler assignment
+      const video = videoRef.current;
+      video.onloadedmetadata = () => {
+        video.play()
+          .then(() => {
+            console.log("Camera is active and playing");
+            setCameraState('active');
+            
+            // Initialize canvas once we have video dimensions
+            if (canvasRef.current && videoRef.current) {
+              canvasRef.current.width = videoRef.current.videoWidth || width;
+              canvasRef.current.height = videoRef.current.videoHeight || height;
+              
+              // Start pose detection
+              startPoseDetection();
+            }
+          })
+          .catch(error => {
+            console.error("Error playing video:", error);
+            setCameraState('error');
+          });
+      };
+    } catch (error) {
+      console.error("Camera access error:", error);
+      
+      // Check if this is a permissions policy violation (common in iframes)
+      if (error instanceof DOMException && 
+          (error.message.includes("Permissions policy") || 
+           error.name === "NotAllowedError")) {
+        setCameraState('restricted');
+      } else {
+        setCameraState('error');
+        toast({
+          title: 'Camera Error',
+          description: 'Could not access your camera. Please check permissions.',
+          variant: 'destructive'
+        });
+      }
     }
   };
-  
-  // Switch camera
-  const switchCamera = async () => {
-    // Clean up existing detection loop
-    if (detectionLoopRef.current !== null) {
-      cancelAnimationFrame(detectionLoopRef.current);
-      detectionLoopRef.current = null;
-    }
-    
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-    }
-    
-    const currentIndex = devices.findIndex(device => device.deviceId === selectedDeviceId);
-    const nextIndex = (currentIndex + 1) % devices.length;
-    
-    setSelectedDeviceId(devices[nextIndex].deviceId);
-    setIsCameraActive(false);
-    setIsDetecting(false);
-  };
-  
-  // Continuously detect poses
-  const detectPoseLoop = async () => {
+
+  // Start pose detection loop
+  const startPoseDetection = () => {
     if (!videoRef.current || !canvasRef.current) return;
     
     const video = videoRef.current;
@@ -209,240 +139,322 @@ const Webcam: React.FC<WebcamProps> = ({
     
     if (!ctx) return;
     
-    // Wait for the video to be properly loaded
-    if (video.readyState < 2) {
-      console.log("Video not ready yet, waiting...");
-      setTimeout(detectPoseLoop, 100);
-      return;
-    }
-    
-    // Update canvas dimensions if needed
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth || width;
-      canvas.height = video.videoHeight || height;
-      console.log(`Canvas dimensions updated to: ${canvas.width}x${canvas.height}`);
-    }
-    
     setIsDetecting(true);
     
     const detectFrame = async () => {
-      // Only proceed if camera is active
-      if (!isCameraActive) {
-        console.log("Camera inactive - pausing pose detection until camera is active again");
+      // Skip if camera is no longer active
+      if (cameraState !== 'active' || !videoRef.current || !canvasRef.current) {
         setIsDetecting(false);
         return;
       }
       
-      // Check if video element still exists and is playing
-      if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) {
-        console.log("Video paused/ended - pausing pose detection");
-        setIsDetecting(false);
-        return;
-      }
-      
-      if (videoRef.current.readyState >= 2) {
-        // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        if (debugMode) {
-          // Add debug overlay with semi-transparent background
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
+      try {
+        // Ensure video is playing and ready
+        if (video.readyState >= 2) {
+          // Clear canvas
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
           
-          // Display debug text
-          ctx.font = '16px sans-serif';
-          ctx.fillStyle = 'white';
-          ctx.fillText(`Camera active: ${isCameraActive ? 'Yes' : 'No'}`, 10, 30);
-          ctx.fillText(`Canvas size: ${canvas.width}x${canvas.height}`, 10, 60);
-          ctx.fillText(`Detecting poses: ${isDetecting ? 'Yes' : 'No'}`, 10, 90);
-        }
-        
-        try {
-          // Detect poses
+          // Always draw the video frame first so the user can see themselves
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          // Try to detect poses
           const poses = await detectPoses(video);
           
           if (poses && poses.length > 0) {
-            // Draw skeleton with MUCH higher visibility
+            // Draw skeleton overlay
             drawSkeleton(ctx, poses[0], canvas.width, canvas.height);
             setDetectedPose(true);
             
-            if (debugMode) {
-              // Show additional debug info for pose
-              ctx.fillStyle = 'white';
-              ctx.fillText(`Pose detected: Yes`, 10, 120);
-              ctx.fillText(`Keypoints: ${poses[0].keypoints.length}`, 10, 150);
-            }
-            
-            // Callback with pose data
+            // Send pose data to parent component
             if (onPoseDetected) {
               onPoseDetected(poses[0]);
             }
           } else {
             setDetectedPose(false);
-            if (debugMode) {
-              ctx.fillStyle = 'white';
-              ctx.fillText(`Pose detected: No`, 10, 120);
-            }
-          }
-        } catch (error) {
-          console.error('Error detecting poses:', error);
-          if (debugMode) {
-            ctx.fillStyle = 'red';
-            ctx.fillText(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 10, 180);
           }
         }
+      } catch (error) {
+        console.error("Pose detection error:", error);
+        // Just continue with camera feed without pose detection
       }
       
-      // Continue detection loop with a reference we can cancel if needed
+      // Continue detection loop
       detectionLoopRef.current = requestAnimationFrame(detectFrame);
     };
     
-    // Start detection loop
-    console.log("Starting pose detection loop");
+    // Start the detection loop
     detectionLoopRef.current = requestAnimationFrame(detectFrame);
   };
-  
+
+  // Handle manual rep counting mode
+  const activateManualMode = () => {
+    setShowManualMode(true);
+    
+    toast({
+      title: 'Manual Counting Mode Activated',
+      description: 'You can now count your reps manually using the buttons.',
+    });
+    
+    // Let the parent component know we're in manual mode
+    if (onPoseDetected) {
+      onPoseDetected({ manualMode: true });
+    }
+  };
+
+  // Reset everything and try again
+  const resetCamera = () => {
+    // Stop camera
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    
+    // Stop detection loop
+    if (detectionLoopRef.current) {
+      cancelAnimationFrame(detectionLoopRef.current);
+      detectionLoopRef.current = null;
+    }
+    
+    // Reset state
+    setCameraState('inactive');
+    setIsDetecting(false);
+    setDetectedPose(false);
+    setShowManualMode(false);
+  };
+
+  // Opens the current page in a new tab to escape iframe restrictions
+  const openInNewTab = () => {
+    window.open(window.location.href, '_blank');
+  };
+
   return (
     <div className={`relative ${className}`}>
       <div className="camera-container bg-gray-900 relative overflow-hidden rounded-lg" style={{ minHeight: '400px', position: 'relative' }}>
+        {/* Video element - always present but may be hidden */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          width={width}
-          height={height}
-          style={{ 
-            width: '100%', 
-            height: '100%', 
-            objectFit: 'cover',
-            display: isCameraActive ? 'block' : 'none',
-            position: 'absolute',
-            zIndex: 1 
-          }}
-        />
-        <canvas
-          ref={canvasRef}
-          width={width}
-          height={height}
-          style={{ 
-            position: 'absolute', 
-            top: 0, 
-            left: 0, 
-            width: '100%', 
-            height: '100%', 
-            zIndex: 2,
-            display: isCameraActive ? 'block' : 'none' 
-          }}
+          className="w-full h-full object-cover absolute inset-0 z-10"
+          style={{ display: cameraState === 'active' ? 'block' : 'none' }}
         />
         
-        {!isCameraActive && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800 text-white p-4">
+        {/* Canvas overlay for skeleton - only visible when camera is active */}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 z-20 w-full h-full"
+          style={{ display: cameraState === 'active' ? 'block' : 'none' }}
+        />
+        
+        {/* State-based UI overlays */}
+        
+        {/* Initial state when camera is inactive */}
+        {cameraState === 'inactive' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-white">
             <Camera className="h-16 w-16 mb-4 text-gray-400" />
-            <div className="mb-4 text-center">
-              <h3 className="text-lg font-bold mb-2">Camera Access Required</h3>
-              <p className="text-sm text-gray-300">
-                This exercise requires camera access for pose detection.
+            <h3 className="text-xl font-bold mb-2">Camera Access Required</h3>
+            <p className="text-sm text-center text-gray-300 mb-6 max-w-md">
+              This exercise requires camera access to analyze your form and count repetitions.
+              Your video stays on your device and is not uploaded or stored.
+            </p>
+            
+            {isEmbedded && (
+              <div className="bg-amber-900/50 rounded-lg p-4 mb-4 max-w-md">
+                <p className="text-sm text-amber-200 flex items-center">
+                  <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
+                  You may need to open this page in a new tab for camera access
+                </p>
+              </div>
+            )}
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button 
+                onClick={enableCamera}
+                className="bg-primary hover:bg-primary/90 text-white"
+              >
+                <Camera className="h-4 w-4 mr-2" />
+                Enable Camera
+              </Button>
+              
+              {isEmbedded && (
+                <Button 
+                  onClick={openInNewTab}
+                  variant="outline"
+                  className="text-white border-white/20 hover:bg-white/10"
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open in New Tab
+                </Button>
+              )}
+              
+              <Button 
+                onClick={activateManualMode}
+                variant="outline"
+                className="text-white border-white/20 hover:bg-white/10"
+              >
+                <Calculator className="h-4 w-4 mr-2" />
+                Manual Counting
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        {/* Camera requesting state */}
+        {cameraState === 'requesting' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-white">
+            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+            <h3 className="text-xl font-bold mb-2">Requesting Camera...</h3>
+            <p className="text-sm text-center text-gray-300 mb-4">
+              Please allow camera access when prompted by your browser.
+            </p>
+          </div>
+        )}
+        
+        {/* Error state */}
+        {cameraState === 'error' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-white">
+            <X className="h-16 w-16 mb-4 text-red-500" />
+            <h3 className="text-xl font-bold mb-2">Camera Error</h3>
+            <p className="text-sm text-center text-gray-300 mb-6 max-w-md">
+              We couldn't access your camera. This might be due to:
+            </p>
+            <ul className="list-disc text-sm text-left text-gray-300 mb-6 max-w-md pl-6">
+              <li>Camera permission denied</li>
+              <li>No camera connected to your device</li>
+              <li>Another app is using your camera</li>
+            </ul>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button 
+                onClick={resetCamera}
+                className="bg-primary hover:bg-primary/90 text-white"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Try Again
+              </Button>
+              
+              <Button 
+                onClick={activateManualMode}
+                variant="outline"
+                className="text-white border-white/20 hover:bg-white/10"
+              >
+                <Calculator className="h-4 w-4 mr-2" />
+                Manual Counting
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        {/* Restricted mode (permissions policy violation) */}
+        {cameraState === 'restricted' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-white">
+            <AlertTriangle className="h-16 w-16 mb-4 text-amber-500" />
+            <h3 className="text-xl font-bold mb-2">Security Restriction Detected</h3>
+            <p className="text-sm text-center text-gray-300 mb-4 max-w-md">
+              Your browser is blocking camera access because this site is embedded in another website.
+            </p>
+            <div className="bg-amber-900/50 rounded-lg p-4 mb-6 max-w-md">
+              <p className="text-sm text-amber-200">
+                To fix this issue, please open this page in a new tab using the button below.
               </p>
             </div>
-            <Button 
-              onClick={startCamera}
-              className="bg-primary flex items-center"
-            >
-              <Camera className="h-4 w-4 mr-2" />
-              Enable Camera
-            </Button>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button 
+                onClick={openInNewTab}
+                className="bg-primary hover:bg-primary/90 text-white"
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open in New Tab
+              </Button>
+              
+              <Button 
+                onClick={activateManualMode}
+                variant="outline"
+                className="text-white border-white/20 hover:bg-white/10"
+              >
+                <Calculator className="h-4 w-4 mr-2" />
+                Manual Counting
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        {/* Manual counting mode overlay */}
+        {showManualMode && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-white bg-gray-900">
+            <Calculator className="h-16 w-16 mb-4 text-blue-400" />
+            <h3 className="text-xl font-bold mb-2">Manual Counting Mode</h3>
+            <p className="text-sm text-center text-gray-300 mb-6 max-w-md">
+              Camera analysis is disabled. Please count your repetitions manually using the controls provided.
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button 
+                onClick={resetCamera}
+                variant="outline"
+                className="text-white border-white/20 hover:bg-white/10"
+              >
+                <Camera className="h-4 w-4 mr-2" />
+                Try Camera Again
+              </Button>
+            </div>
           </div>
         )}
       </div>
       
-      <div className="mt-4 flex items-center justify-between">
-        <div>
-          <span className="text-sm text-gray-500">Camera Status:</span>
-          <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-            isCameraActive ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+      {/* Status bar below camera */}
+      <div className="mt-4 flex items-center justify-between text-sm">
+        <div className="flex items-center">
+          <span className="text-gray-500">Camera:</span>
+          <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+            cameraState === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
           }`}>
-            {isCameraActive ? 'Active' : 'Inactive'}
+            {cameraState === 'active' ? 'Active' : cameraState === 'requesting' ? 'Requesting...' : 'Inactive'}
           </span>
           
-          {isCameraActive && (
+          {cameraState === 'active' && (
             <>
-              <span className="ml-4 text-sm text-gray-500">Pose Detection:</span>
-              <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                isDetecting ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
+              <span className="ml-3 text-gray-500">Detection:</span>
+              <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                isDetecting ? (detectedPose ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800') : 'bg-red-100 text-red-800'
               }`}>
-                {isDetecting ? (detectedPose ? 'Detected' : 'Searching') : 'Inactive'}
+                {isDetecting ? (detectedPose ? 'Detected' : 'Searching') : 'Off'}
               </span>
             </>
+          )}
+          
+          {showManualMode && (
+            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              Manual Mode
+            </span>
           )}
         </div>
         
         <div className="flex space-x-2">
-          {!isCameraActive && (
+          {cameraState === 'active' && (
             <Button
-              variant="default"
+              variant="secondary"
               size="sm"
-              onClick={startCamera}
-              className="text-sm flex items-center"
+              onClick={resetCamera}
+              className="text-xs flex items-center"
             >
-              <Camera className="h-4 w-4 mr-1" />
-              Start Camera
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Reset
             </Button>
           )}
           
-          {isCameraActive && (
-            <>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  // Clean up detection loop
-                  if (detectionLoopRef.current !== null) {
-                    cancelAnimationFrame(detectionLoopRef.current);
-                    detectionLoopRef.current = null;
-                  }
-                  
-                  if (videoRef.current && videoRef.current.srcObject) {
-                    const stream = videoRef.current.srcObject as MediaStream;
-                    stream.getTracks().forEach(track => track.stop());
-                    videoRef.current.srcObject = null;
-                    setIsCameraActive(false);
-                    setIsDetecting(false);
-                    
-                    // Restart camera after a short delay
-                    setTimeout(() => {
-                      startCamera();
-                    }, 500);
-                  }
-                }}
-                className="text-sm flex items-center"
-                title="Restart camera"
-              >
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Refresh
-              </Button>
-              
-              <Button
-                variant={debugMode ? "default" : "outline"}
-                size="sm"
-                onClick={() => setDebugMode(!debugMode)}
-                className="text-sm flex items-center"
-                title="Toggle debug mode"
-              >
-                <Bug className="h-4 w-4 mr-1" />
-                {debugMode ? "Debug On" : "Debug Off"}
-              </Button>
-            </>
-          )}
-          
-          {devices.length > 1 && isCameraActive && (
+          {cameraState !== 'active' && !showManualMode && (
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
-              onClick={switchCamera}
-              className="text-sm"
+              onClick={enableCamera}
+              className="text-xs flex items-center"
             >
-              Switch Camera
+              <Camera className="h-3 w-3 mr-1" />
+              Enable Camera
             </Button>
           )}
         </div>

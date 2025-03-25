@@ -1,5 +1,5 @@
 {
-    "ETag": "E9RZBS51F31KJ",
+    "ETag": "E192BUBZTTI7MR",
     "DistributionConfig": {
         "CallerReference": "setup-1742822491",
         "Aliases": {
@@ -14,7 +14,7 @@
             "Items": [
                 {
                     "Id": "ApiBackend",
-                    "DomainName": "ec2-52-1-128-170.compute-1.amazonaws.com",
+                    "DomainName": "ec2-3-89-124-135.compute-1.amazonaws.com",
                     "OriginPath": "",
                     "CustomHeaders": {
                         "Quantity": 0
@@ -83,15 +83,10 @@
             },
             "ViewerProtocolPolicy": "redirect-to-https",
             "AllowedMethods": {
-                "Quantity": 7,
+                "Quantity": 2,
                 "Items": [
                     "HEAD",
-                    "DELETE",
-                    "POST",
-                    "GET",
-                    "OPTIONS",
-                    "PUT",
-                    "PATCH"
+                    "GET"
                 ],
                 "CachedMethods": {
                     "Quantity": 2,
@@ -158,32 +153,11 @@
                         "Quantity": 0
                     },
                     "FieldLevelEncryptionId": "",
+                    "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+                    "OriginRequestPolicyId": "216adef6-5c7f-47e4-b989-5492eafa07d3",
                     "GrpcConfig": {
                         "Enabled": false
-                    },
-                    "ForwardedValues": {
-                        "QueryString": true,
-                        "Cookies": {
-                            "Forward": "all"
-                        },
-                        "Headers": {
-                            "Quantity": 6,
-                            "Items": [
-                                "Authorization",
-                                "Origin",
-                                "Access-Control-Request-Method",
-                                "Access-Control-Request-Headers",
-                                "Host",
-                                "Content-Type"
-                            ]
-                        },
-                        "QueryStringCacheKeys": {
-                            "Quantity": 0
-                        }
-                    },
-                    "MinTTL": 0,
-                    "DefaultTTL": 0,
-                    "MaxTTL": 0
+                    }
                 }
             ]
         },
@@ -208,12 +182,10 @@
         "PriceClass": "PriceClass_100",
         "Enabled": true,
         "ViewerCertificate": {
-            "CloudFrontDefaultCertificate": false,
-            "ACMCertificateArn": "arn:aws:acm:us-east-1:476114114609:certificate/f1809d71-c401-47f1-a212-41c5cfc91538",
-            "SSLSupportMethod": "sni-only",
-            "MinimumProtocolVersion": "TLSv1.2_2021",
-            "Certificate": "arn:aws:acm:us-east-1:476114114609:certificate/f1809d71-c401-47f1-a212-41c5cfc91538",
-            "CertificateSource": "acm"
+            "CloudFrontDefaultCertificate": true,
+            "SSLSupportMethod": "vip",
+            "MinimumProtocolVersion": "TLSv1",
+            "CertificateSource": "cloudfront"
         },
         "Restrictions": {
             "GeoRestriction": {

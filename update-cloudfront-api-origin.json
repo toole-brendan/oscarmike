@@ -7,7 +7,7 @@
       "Items": [
         {
           "Id": "ApiBackend",
-          "DomainName": "ec2-3-89-124-135.compute-1.amazonaws.com",
+          "DomainName": "ec2-52-1-128-170.compute-1.amazonaws.com",
           "OriginPath": "",
           "CustomHeaders": {
             "Quantity": 0
@@ -15,7 +15,7 @@
           "CustomOriginConfig": {
             "HTTPPort": 80,
             "HTTPSPort": 443,
-            "OriginProtocolPolicy": "http-only",
+            "OriginProtocolPolicy": "https-only",
             "OriginSslProtocols": {
               "Quantity": 1,
               "Items": [
@@ -29,7 +29,8 @@
           "ConnectionTimeout": 10,
           "OriginShield": {
             "Enabled": false
-          }
+          },
+          "OriginAccessControlId": ""
         },
         {
           "Id": "S3-ptchampion.ai",

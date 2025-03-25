@@ -3,9 +3,80 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <!-- Camera permission headers with correct syntax for iframe embedding -->
+    <meta http-equiv="Feature-Policy" content="camera *" />
+    <meta http-equiv="Permissions-Policy" content="camera=(self https://ptchampion.ai https://*.ptchampion.ai *)" />
+    <!-- Define CSP with required domains for TensorFlow and allow iframe embedding -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; media-src 'self' blob: mediadevice:; connect-src 'self' https://*.ptchampion.ai wss://*.ptchampion.ai https://tfhub.dev https://*.tensorflow.org https://*.kaggle.com https://www.kaggle.com https://storage.googleapis.com; img-src 'self' data: blob:; worker-src 'self' blob:; frame-ancestors 'self' https://ptchampion.ai https://*.ptchampion.ai *;" />
+    <title>PT Champion</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Inline camera permission script -->
+    <script>
+      // Camera permission helper script
+      (function() {
+        console.log("Camera permissions helper initialized");
+        
+        // Function to request camera permissions with maximum compatibility
+        async function requestCameraWithFallbacks() {
+          console.log("Attempting to request camera access with multiple methods");
+          
+          try {
+            // Try with minimal constraints first (most compatible)
+            console.log("Trying with minimal constraints");
+            const minimalStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            console.log("Camera access granted with minimal constraints!");
+            minimalStream.getTracks().forEach(track => track.stop());
+            return true;
+          } catch (error) {
+            console.warn("Camera access failed:", error);
+            
+            // Log detailed information about the browser environment
+            console.log("Browser details:", {
+              userAgent: navigator.userAgent,
+              vendor: navigator.vendor,
+              platform: navigator.platform,
+              mediaDevices: !!navigator.mediaDevices,
+              getUserMedia: !!navigator.mediaDevices?.getUserMedia,
+              secureContext: window.isSecureContext,
+              protocol: window.location.protocol,
+              origin: window.location.origin,
+              host: window.location.host
+            });
+            
+            return false;
+          }
+        }
+        
+        // Allow the main app to initialize first
+        setTimeout(() => {
+          console.log("Checking camera permission status...");
+          if ('permissions' in navigator) {
+            navigator.permissions.query({ name: 'camera' })
+              .then(permissionStatus => {
+                console.log("Camera permission status:", permissionStatus.state);
+                
+                // Monitor for permission changes
+                permissionStatus.onchange = () => {
+                  console.log("Camera permission changed to:", permissionStatus.state);
+                };
+                
+                if (permissionStatus.state === 'prompt' || permissionStatus.state === 'denied') {
+                  requestCameraWithFallbacks();
+                }
+              })
+              .catch(error => {
+                console.error("Error checking camera permission:", error);
+                requestCameraWithFallbacks();
+              });
+          } else {
+            console.log("Permissions API not available, trying direct camera access");
+            requestCameraWithFallbacks();
+          }
+        }, 2000);
+      })();
+    </script>
   </body>
 </html>

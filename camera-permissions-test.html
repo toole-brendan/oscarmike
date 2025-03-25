@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Permissions Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        button {
+            background-color: #3366ff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        button:hover {
+            background-color: #2952cc;
+        }
+        .section {
+            margin-bottom: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        .status-success {
+            color: green;
+            font-weight: bold;
+        }
+        .status-error {
+            color: red;
+            font-weight: bold;
+        }
+        video {
+            width: 100%;
+            max-width: 640px;
+            background: #000;
+            border-radius: 8px;
+        }
+        #headers-display {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Camera Permissions Test</h1>
+    
+    <div class="section">
+        <h2>1. Request Headers Test</h2>
+        <p>This test shows what security headers are actually being served by CloudFront for this page:</p>
+        <div id="headers-display">Loading headers...</div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Camera Access Test</h2>
+        <p>Click the button below to test camera access:</p>
+        <button id="camera-test">Test Camera Access</button>
+        <div id="camera-result"></div>
+        <video id="video" autoplay playsinline style="display: none;"></video>
+    </div>
+    
+    <div class="section">
+        <h2>3. Iframe Embedding Test</h2>
+        <p>This test shows if camera access works when this page is embedded in an iframe:</p>
+        <button id="embed-test">Test Iframe Embedding</button>
+        <div id="embed-container"></div>
+    </div>
+
+    <script>
+        // 1. Check and display the headers
+        async function fetchAndDisplayHeaders() {
+            try {
+                const response = await fetch(window.location.href);
+                const headers = response.headers;
+                
+                // Create a formatted display of headers
+                let headersText = '<h3>Response Headers:</h3><pre>';
+                const securityHeaders = [
+                    'content-security-policy',
+                    'permissions-policy',
+                    'feature-policy',
+                    'cross-origin-embedder-policy',
+                    'cross-origin-opener-policy',
+                    'cross-origin-resource-policy'
+                ];
+                
+                securityHeaders.forEach(header => {
+                    const value = headers.get(header);
+                    if (value) {
+                        headersText += `<strong>${header}</strong>: ${value}\n\n`;
+                    } else {
+                        headersText += `<strong>${header}</strong>: <span class="status-error">Not found</span>\n\n`;
+                    }
+                });
+                
+                headersText += '</pre>';
+                document.getElementById('headers-display').innerHTML = headersText;
+            } catch (error) {
+                document.getElementById('headers-display').innerHTML = 
+                    `<div class="status-error">Error fetching headers: ${error.message}</div>`;
+            }
+        }
+        
+        // 2. Test camera access
+        async function testCameraAccess() {
+            const video = document.getElementById('video');
+            const resultDiv = document.getElementById('camera-result');
+            
+            try {
+                resultDiv.innerHTML = '<div>Requesting camera access...</div>';
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true,
+                    audio: false
+                });
+                
+                video.srcObject = stream;
+                video.style.display = 'block';
+                
+                resultDiv.innerHTML = 
+                    `<div class="status-success">Camera access granted successfully!</div>`;
+                
+            } catch (error) {
+                video.style.display = 'none';
+                
+                let errorMsg = '';
+                if (error.name === 'NotAllowedError') {
+                    errorMsg = 'Permission denied by user or system.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMsg = 'No camera found.';
+                } else if (error.name === 'NotReadableError') {
+                    errorMsg = 'Camera already in use.';
+                } else {
+                    errorMsg = `${error.name}: ${error.message}`;
+                }
+                
+                resultDiv.innerHTML = 
+                    `<div class="status-error">Camera access failed: ${errorMsg}</div>`;
+            }
+        }
+        
+        // 3. Test iframe embedding
+        function testEmbedding() {
+            const container = document.getElementById('embed-container');
+            
+            // Create iframe that loads this same page
+            const iframe = document.createElement('iframe');
+            iframe.src = window.location.href + '?embedded=true';
+            iframe.width = '100%';
+            iframe.height = '400px';
+            iframe.style.border = '1px solid #ddd';
+            iframe.style.borderRadius = '5px';
+            
+            container.innerHTML = '';
+            container.appendChild(iframe);
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // Only fetch headers if not embedded
+            if (!window.location.search.includes('embedded=true')) {
+                fetchAndDisplayHeaders();
+            }
+            
+            document.getElementById('camera-test').addEventListener('click', testCameraAccess);
+            document.getElementById('embed-test').addEventListener('click', testEmbedding);
+            
+            // If we're in embedded mode, add a notice
+            if (window.location.search.includes('embedded=true')) {
+                document.body.insertAdjacentHTML('afterbegin', 
+                    '<div style="background-color: #ffeeba; padding: 10px; border-radius: 5px; margin-bottom: 20px;">' +
+                    '<strong>This page is being viewed in an iframe.</strong> ' +
+                    'Camera access in this context depends on proper security headers being configured.' +
+                    '</div>');
+            }
+        });
+    </script>
+</body>
+</html>

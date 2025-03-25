@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Camera Test</title>
+    <style>
+        body { font-family: system-ui; max-width: 800px; margin: 0 auto; padding: 20px; }
+        video { width: 100%; max-width: 640px; background: #f0f0f0; border-radius: 8px; }
+        button { padding: 10px 20px; background: #0070f3; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        #log { background: #f0f0f0; padding: 10px; border-radius: 4px; font-family: monospace; white-space: pre-wrap; height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>Simple Camera Test</h1>
+    <video id="video" autoplay playsinline></video>
+    <div style="margin: 10px 0">
+        <button id="start">Start Camera</button>
+        <button id="stop" disabled>Stop Camera</button>
+    </div>
+    <div id="log"></div>
+
+    <script>
+        const log = (msg) => {
+            document.getElementById('log').textContent += msg + '\n';
+            console.log(msg);
+        };
+
+        const startBtn = document.getElementById('start');
+        const stopBtn = document.getElementById('stop');
+        const video = document.getElementById('video');
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                log('Environment: ' + 
+                    JSON.stringify({
+                        secureContext: window.isSecureContext,
+                        protocol: location.protocol,
+                        host: location.host
+                    })
+                );
+                
+                log('Requesting camera...');
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: false
+                });
+                
+                video.srcObject = stream;
+                log('Camera started successfully!');
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } catch (error) {
+                log(`Error: ${error.name} - ${error.message}`);
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                log('Camera stopped');
+                
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        });
+
+        log('Page loaded. Click "Start Camera"');
+    </script>
+</body>
+</html> 

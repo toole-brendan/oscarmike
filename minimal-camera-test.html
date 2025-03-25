@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Camera permission with correct syntax -->
+  <meta http-equiv="Feature-Policy" content="camera *">
+  <meta http-equiv="Permissions-Policy" content="camera=(self https://ptchampion.ai https://*.ptchampion.ai *)">
+  <title>Minimal Camera Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+    button { padding: 15px; font-size: 18px; margin: 20px 0; }
+    video { border: 2px solid #ccc; background: #f0f0f0; width: 100%; max-width: 640px; }
+    #log { background: #f5f5f5; border: 1px solid #ddd; padding: 10px; max-height: 200px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <h1>Minimal Camera Test</h1>
+  <p>This is a stripped-down test for camera permissions.</p>
+  
+  <div>
+    <button id="requestCamera">Request Camera Access</button>
+    <br>
+    <video id="video" autoplay playsinline muted></video>
+  </div>
+  
+  <h3>Log:</h3>
+  <div id="log"></div>
+  
+  <script>
+    // Simple logging
+    function log(message) {
+      const logElement = document.getElementById('log');
+      console.log(message);
+      const lineElement = document.createElement('div');
+      lineElement.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+      logElement.appendChild(lineElement);
+      logElement.scrollTop = logElement.scrollHeight;
+    }
+    
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+      log('Page loaded');
+      log(`Secure context: ${window.isSecureContext}`);
+      log(`Protocol: ${location.protocol}`);
+      log(`Camera capabilities: MediaDevices API ${!!navigator.mediaDevices}, getUserMedia ${!!navigator.mediaDevices?.getUserMedia}`);
+      
+      // Request camera button
+      document.getElementById('requestCamera').addEventListener('click', async function() {
+        const video = document.getElementById('video');
+        
+        try {
+          log('Requesting camera access...');
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: true 
+          });
+          
+          log('Camera access granted!');
+          video.srcObject = stream;
+        } catch (error) {
+          log(`Error accessing camera: ${error.name}: ${error.message}`);
+        }
+      });
+    });
+  </script>
+</body>
+</html>

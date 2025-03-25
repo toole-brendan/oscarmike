@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Header Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        video {
+            width: 100%;
+            max-width: 640px;
+            background-color: #f0f0f0;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #0070f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            max-width: 300px;
+        }
+        button:hover {
+            background-color: #0060df;
+        }
+        .info {
+            background-color: #f8f9fa;
+            border-left: 4px solid #0070f3;
+            padding: 10px 20px;
+            margin: 20px 0;
+        }
+        #logs {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            height: 200px;
+            overflow-y: auto;
+        }
+        .error { color: red; }
+        .success { color: green; }
+        .log { background: #f8f8f8; border: 1px solid #ddd; padding: 10px; margin: 10px 0; height: 150px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>Camera Access and Headers Test</h1>
+    
+    <div class="container">
+        <div class="info">
+            <p>This page tests camera access and displays domain/header information.</p>
+            <p>Current domain: <strong id="current-domain"></strong></p>
+        </div>
+        
+        <h2>Camera Test</h2>
+        <button id="enable-camera">Enable Camera</button>
+        <video id="video" width="400" height="300" autoplay muted></video>
+        <div id="camera-result"></div>
+        
+        <h2>Browser & Environment Information</h2>
+        <pre id="browserInfo"></pre>
+        
+        <h2>Headers Check</h2>
+        <div id="headers-check">
+            <p>Headers cannot be directly inspected from JavaScript, but we can detect if they're working correctly.</p>
+            <button id="check-headers">Check Headers Indirectly</button>
+            <div id="headers-result"></div>
+        </div>
+        
+        <h2>Logs</h2>
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        // Log function
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            logElement.appendChild(entry);
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+        
+        // Display browser & environment info
+        function displayBrowserInfo() {
+            const info = {
+                userAgent: navigator.userAgent,
+                vendor: navigator.vendor,
+                platform: navigator.platform,
+                mediaDevices: !!navigator.mediaDevices,
+                getUserMedia: !!navigator.mediaDevices?.getUserMedia,
+                secureContext: window.isSecureContext,
+                protocol: window.location.protocol,
+                host: window.location.host,
+                origin: window.location.origin,
+                permissions: 'Permissions' in navigator ? 'Available' : 'Not available'
+            };
+            
+            document.getElementById('browserInfo').textContent = JSON.stringify(info, null, 2);
+            document.getElementById('current-domain').textContent = window.location.host;
+            log('Browser info collected');
+        }
+        
+        // Camera access
+        async function enableCamera() {
+            const resultElement = document.getElementById('camera-result');
+            const videoElement = document.getElementById('video');
+            
+            try {
+                log('Requesting camera access...');
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                videoElement.srcObject = stream;
+                resultElement.textContent = '✅ Success! Camera access granted.';
+                resultElement.className = 'success';
+                log('Camera access successful');
+                return true;
+            } catch (error) {
+                resultElement.textContent = `❌ Error: ${error.name}: ${error.message}`;
+                resultElement.className = 'error';
+                log(`Camera error: ${error.name}: ${error.message}`);
+                return false;
+            }
+        }
+        
+        // Check if headers are working by trying to access the camera
+        async function checkHeaders() {
+            const headersResult = document.getElementById('headers-result');
+            
+            try {
+                log('Checking if security headers are working...');
+                
+                // Check for permissions API
+                if ('permissions' in navigator) {
+                    const status = await navigator.permissions.query({ name: 'camera' });
+                    log(`Current permission status: ${status.state}`);
+                    
+                    if (status.state === 'granted' || status.state === 'prompt') {
+                        headersResult.textContent = '✅ Headers appear to be correctly configured for camera permissions.';
+                        headersResult.className = 'success';
+                    } else {
+                        headersResult.textContent = '❌ Headers may not be configured correctly. Camera permission is denied.';
+                        headersResult.className = 'error';
+                    }
+                } else {
+                    // Fallback - just try to access the camera
+                    const cameraAccess = await enableCamera();
+                    if (cameraAccess) {
+                        headersResult.textContent = '✅ Headers appear to be working correctly for camera access.';
+                        headersResult.className = 'success';
+                    } else {
+                        headersResult.textContent = '❌ Headers may not be configured correctly. Camera access failed.';
+                        headersResult.className = 'error';
+                    }
+                }
+            } catch (error) {
+                headersResult.textContent = `❌ Error checking headers: ${error.message}`;
+                headersResult.className = 'error';
+                log(`Headers check error: ${error.message}`);
+            }
+        }
+        
+        // Setup event listeners
+        document.getElementById('enable-camera').addEventListener('click', enableCamera);
+        document.getElementById('check-headers').addEventListener('click', checkHeaders);
+        
+        // Initialize
+        window.onload = () => {
+            log('Page loaded');
+            displayBrowserInfo();
+        };
+    </script>
+</body>
+</html> 

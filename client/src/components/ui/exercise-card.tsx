@@ -22,11 +22,9 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
   const info = exerciseInfo[type];
   
   const handleClick = () => {
-    if (type === 'run') {
-      navigate('/run');
-    } else {
-      navigate(`/exercise/${type}`);
-    }
+    // Use window.location to ensure URL actually changes in the browser
+    // Navigate directly to dedicated exercise pages
+    window.location.href = `/${type}`;
   };
   
   const getStatusBadge = () => {
